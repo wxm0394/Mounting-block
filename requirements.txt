@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+spacy
+wordfreq
+google-genai
+pydantic

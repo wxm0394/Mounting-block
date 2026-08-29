@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { annotateText, MOCK_DICTIONARY } from './lib/annotator';
 import './index.css';
 

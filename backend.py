@@ -490,6 +490,8 @@ Words/Phrases to translate:
                             set_cached_translation(key, target_lang, item.translation)
         except Exception as e:
             print(f"Gemini translation failed: {e}")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=502, detail=f"LLM Translation failed: {str(e)}")
 
     result = {}
     lang_prefix = target_lang.lower().split('-')[0]
