@@ -453,9 +453,15 @@ class TranslationBatch(BaseModel):
 
 def batch_translate(annotations: dict[str, dict], target_lang: str, source_text: str) -> dict[str, dict]:
     to_translate = []
+    # Collect all top-level keys
     for key in annotations:
         if get_cached_translation(key, target_lang) is None:
             to_translate.append(key)
+        # Also collect all sub_words
+        for sw in annotations[key].get("sub_words", []):
+            sw_key = sw["surface"].lower()
+            if get_cached_translation(sw_key, target_lang) is None and sw_key not in to_translate:
+                to_translate.append(sw_key)
 
     if to_translate:
         client = genai.Client() # Assumes GEMINI_API_KEY is in env
@@ -499,6 +505,17 @@ Words/Phrases to translate:
     for key, meta in annotations.items():
         trans = get_cached_translation(key, target_lang) or ""
         entry = dict(meta)
+        
+        # Hydrate sub_words translation
+        if "sub_words" in entry:
+            hydrated_sub_words = []
+            for sw in entry["sub_words"]:
+                sw_key = sw["surface"].lower()
+                sw_trans = get_cached_translation(sw_key, target_lang) or ""
+                hydrated_sw = dict(sw)
+                hydrated_sw["translation"] = sw_trans
+                hydrated_sub_words.append(hydrated_sw)
+            entry["sub_words"] = hydrated_sub_words
         
         # Fetch metadata from LLM mock
         metadata = {}

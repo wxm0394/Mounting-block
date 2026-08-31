@@ -111,7 +111,8 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
       const entry = chunk.entry;
       const trans = entry.semantic?.translation ?? (entry as any).trans ?? '';
       const kind = entry.kind || (entry as any).type || 'word';
-      const level = entry.difficulty?.adjusted_level ?? entry.difficulty?.base_level ?? 500;
+      const rawLevel = entry.difficulty?.adjusted_level ?? entry.difficulty?.base_level ?? 500;
+      const level = Math.round(rawLevel / 50) * 50;
 
       // Single word or entity (no subwords)
       if (kind === 'word' || kind === 'entity' || !entry.sub_words || entry.sub_words.length === 0) {
@@ -142,6 +143,8 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
           }
           
           const actualText = phraseRemainingText.substring(matchIdx, matchIdx + sw.surface.length);
+          const swRawLevel = sw.level ?? 500;
+          const swLevel = Math.round(swRawLevel / 50) * 50;
           // Look up translation: either in subword itself or from the global dictionary
           const swTrans = sw.translation || dict[sw.lemma]?.semantic?.translation || dict[sw.surface]?.semantic?.translation || '';
           let swRtContent = swTrans;
@@ -150,7 +153,7 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
           }
 
           wordsViewNodes.push(
-            <ruby key={`word-${sw.surface}`} className="word-view annotation-word" data-level={sw.level}>
+            <ruby key={`word-${sw.surface}`} className="word-view annotation-word" data-level={swLevel}>
               {actualText}
               <rt>{swRtContent}</rt>
             </ruby>

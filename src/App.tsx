@@ -14,11 +14,25 @@ function paginateText(text: string, charsPerPage = 1200): string[] {
   let currentPage = "";
   
   for (const p of paragraphs) {
-    if (currentPage.length + p.length > charsPerPage && currentPage.length > 0) {
-      pages.push(currentPage);
-      currentPage = p + "\n\n";
+    if (p.length > charsPerPage) {
+      // Force split by sentence boundaries if the paragraph is huge
+      const sentences = p.match(/[^.!?]+[.!?]+/g) || [p];
+      for (const s of sentences) {
+        if (currentPage.length + s.length > charsPerPage && currentPage.length > 0) {
+          pages.push(currentPage);
+          currentPage = s + " ";
+        } else {
+          currentPage += s + " ";
+        }
+      }
+      currentPage += "\n\n";
     } else {
-      currentPage += p + "\n\n";
+      if (currentPage.length + p.length > charsPerPage && currentPage.length > 0) {
+        pages.push(currentPage);
+        currentPage = p + "\n\n";
+      } else {
+        currentPage += p + "\n\n";
+      }
     }
   }
   if (currentPage.trim().length > 0) {
@@ -57,7 +71,7 @@ function App() {
         });
         if (response.ok) {
           const data = await response.json();
-          if (data.dictionary && Object.keys(data.dictionary).length > 0) {
+          if (data.dictionary) {
             setDictionary(data.dictionary);
           }
         }
@@ -77,6 +91,7 @@ function App() {
   }, [text]);
 
   const currentPageText = pages[currentPageIndex] || "";
+  const annotatedPage = useMemo(() => annotateText(currentPageText, dictionary), [currentPageText, dictionary]);
 
   return (
     <div className="app-container">
@@ -134,7 +149,7 @@ function App() {
         <div className="reading-panel">
           <label>Reading View:</label>
           <div className="reader-container" data-threshold={displayLevel}>
-            {annotateText(currentPageText, dictionary)}
+            {annotatedPage}
           </div>
           
           {/* Pagination Controls */}
