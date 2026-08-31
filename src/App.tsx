@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { annotateText, MOCK_DICTIONARY } from './lib/annotator';
 import './index.css';
 
@@ -8,11 +8,38 @@ There is one business which, chances are, almost every kid tries at least once i
 The Lemonade Stand.
 It's this world of childhood, of lemonade stands and sunny days that the author describes in this inspiring book.`;
 
+function paginateText(text: string, charsPerPage = 1200): string[] {
+  const paragraphs = text.split(/\n+/).filter(p => p.trim().length > 0);
+  const pages: string[] = [];
+  let currentPage = "";
+  
+  for (const p of paragraphs) {
+    if (currentPage.length + p.length > charsPerPage && currentPage.length > 0) {
+      pages.push(currentPage);
+      currentPage = p + "\n\n";
+    } else {
+      currentPage += p + "\n\n";
+    }
+  }
+  if (currentPage.trim().length > 0) {
+    pages.push(currentPage);
+  }
+  return pages.length > 0 ? pages : [""];
+}
+
 function App() {
   const [text, setText] = useState(DEFAULT_TEXT);
   const [displayLevel, setDisplayLevel] = useState<number>(700);
   const [dictionary, setDictionary] = useState<Record<string, any>>(MOCK_DICTIONARY);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+
+  const pages = useMemo(() => paginateText(text), [text]);
+
+  // Reset to first page when text changes
+  useEffect(() => {
+    setCurrentPageIndex(0);
+  }, [text]);
 
   // Fetch full dictionary when text changes (NOT when slider moves)
   useEffect(() => {
@@ -48,6 +75,8 @@ function App() {
       abortController.abort();
     };
   }, [text]);
+
+  const currentPageText = pages[currentPageIndex] || "";
 
   return (
     <div className="app-container">
@@ -104,9 +133,32 @@ function App() {
         {/* Right: Reading View */}
         <div className="reading-panel">
           <label>Reading View:</label>
-          <div className="reader-container">
-            {annotateText(text, displayLevel, dictionary)}
+          <div className="reader-container" data-threshold={displayLevel}>
+            {annotateText(currentPageText, dictionary)}
           </div>
+          
+          {/* Pagination Controls */}
+          {pages.length > 1 && (
+            <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '15px' }}>
+              <button 
+                disabled={currentPageIndex === 0} 
+                onClick={() => setCurrentPageIndex(prev => prev - 1)}
+                style={{ padding: '8px 16px', background: '#27272a', border: '1px solid #3f3f46', borderRadius: '6px', color: '#e4e4e7', cursor: currentPageIndex === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                Prev Page
+              </button>
+              <span style={{ fontSize: '0.9rem', color: '#a1a1aa' }}>
+                Page {currentPageIndex + 1} of {pages.length}
+              </span>
+              <button 
+                disabled={currentPageIndex === pages.length - 1} 
+                onClick={() => setCurrentPageIndex(prev => prev + 1)}
+                style={{ padding: '8px 16px', background: '#27272a', border: '1px solid #3f3f46', borderRadius: '6px', color: '#e4e4e7', cursor: currentPageIndex === pages.length - 1 ? 'not-allowed' : 'pointer' }}
+              >
+                Next Page
+              </button>
+            </div>
+          )}
         </div>
 
       </section>

@@ -220,3 +220,847 @@ ruby.annotation-entity rt {
 ruby.annotation-word rt {
   color: #a1a1aa;
 }
+/* ── CSS Slider & Annotation Toggling Matrix ── */
+.reader-container ruby rt { display: none; }
+.annotation-unit .phrase-view { display: none; }
+.annotation-unit .words-view { display: inline; }
+
+.reader-container[data-threshold="500"] ruby[data-level="500"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="550"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="600"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="650"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="700"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="750"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="800"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="500"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="500"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="550"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="600"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="650"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="700"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="750"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="800"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="500"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="550"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="600"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="650"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="700"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="750"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="800"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="500"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="550"] ruby[data-level="550"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="600"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="650"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="700"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="750"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="800"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="550"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="550"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="600"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="650"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="700"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="750"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="800"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="550"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="600"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="650"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="700"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="750"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="800"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="550"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="600"] ruby[data-level="600"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="650"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="700"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="750"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="800"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="600"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="600"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="650"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="700"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="750"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="800"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="600"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="650"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="700"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="750"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="800"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="600"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="650"] ruby[data-level="650"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="700"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="750"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="800"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="650"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="650"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="700"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="750"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="800"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="650"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="700"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="750"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="800"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="650"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="700"] ruby[data-level="700"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="750"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="800"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="700"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="700"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="750"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="800"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="700"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="750"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="800"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="700"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="750"] ruby[data-level="750"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="800"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="750"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="750"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="800"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="750"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="800"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="750"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="800"] ruby[data-level="800"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="800"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="800"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="800"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="800"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="850"] ruby[data-level="850"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="850"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="850"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="850"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="850"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="900"] ruby[data-level="900"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="900"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="900"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="900"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="900"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="950"] ruby[data-level="950"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="950"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="950"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="950"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="950"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1000"] ruby[data-level="1000"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1000"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1000"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1000"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1000"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1050"] ruby[data-level="1050"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1050"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1050"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1050"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1050"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1100"] ruby[data-level="1100"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1100"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1100"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1100"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1100"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1150"] ruby[data-level="1150"] > rt,
+.reader-container[data-threshold="1150"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="1150"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="1150"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="1150"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1150"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1150"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1150"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1150"] .phrase-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1150"] .words-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1150"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1200"] ruby[data-level="1200"] > rt,
+.reader-container[data-threshold="1200"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="1200"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="1200"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1200"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1200"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1200"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1200"] .phrase-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1200"] .words-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1200"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1250"] ruby[data-level="1250"] > rt,
+.reader-container[data-threshold="1250"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="1250"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1250"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1250"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1250"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1250"] .phrase-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1250"] .words-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1250"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1300"] ruby[data-level="1300"] > rt,
+.reader-container[data-threshold="1300"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1300"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1300"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1300"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1300"] .phrase-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1300"] .words-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1300"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1350"] ruby[data-level="1350"] > rt,
+.reader-container[data-threshold="1350"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1350"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1350"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1350"] .phrase-view,
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1350"] .words-view,
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1350"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1400"] ruby[data-level="1400"] > rt,
+.reader-container[data-threshold="1400"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1400"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1400"] .annotation-unit[data-phrase-level="1400"] .phrase-view,
+.reader-container[data-threshold="1400"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1400"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1400"] .annotation-unit[data-phrase-level="1400"] .words-view,
+.reader-container[data-threshold="1400"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1400"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1450"] ruby[data-level="1450"] > rt,
+.reader-container[data-threshold="1450"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1450"] .annotation-unit[data-phrase-level="1450"] .phrase-view,
+.reader-container[data-threshold="1450"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1450"] .annotation-unit[data-phrase-level="1450"] .words-view,
+.reader-container[data-threshold="1450"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}
+
+.reader-container[data-threshold="1500"] ruby[data-level="1500"] > rt {
+  display: block;
+}
+.reader-container[data-threshold="1500"] .annotation-unit[data-phrase-level="1500"] .phrase-view {
+  display: inline;
+}
+.reader-container[data-threshold="1500"] .annotation-unit[data-phrase-level="1500"] .words-view {
+  display: none;
+}

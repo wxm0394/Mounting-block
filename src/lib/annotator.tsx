@@ -5,14 +5,23 @@ interface DifficultyInfo {
   adjusted_level: number;
 }
 
-interface AnnotationEntry {
+export interface SubWordEntry {
+  surface: string;
+  lemma: string;
+  level: number;
+  pos: string;
+  translation?: string;
+}
+
+export interface AnnotationEntry {
   surface: string;
   lemma: string;
   kind: string;           // "word" | "phrase" | "entity"
   difficulty: DifficultyInfo;
   pos: string;
   syntax: { head: string; pattern: string } | null;
-  semantic: { translation: string; translation_confidence: number; cognate_status: string; cognate_confidence: number } | null;
+  semantic: { translation: string; translation_confidence: number; cognate_status: string; cognate_confidence: number, translation_status: string } | null;
+  sub_words?: SubWordEntry[];
 }
 
 export const MOCK_DICTIONARY: Record<string, AnnotationEntry> = {};
@@ -83,24 +92,17 @@ function findPhrasesAndWords(text: string, dict: Record<string, AnnotationEntry>
   return chunks;
 }
 
-export function annotateText(text: string, displayLevelThreshold: number, dict: Record<string, any>): ReactNode[] {
-  // Filter dict to only include entries at or above the display level threshold
-  const filteredDict: Record<string, AnnotationEntry> = {};
-  for (const [key, entry] of Object.entries(dict)) {
-    const dl = entry.difficulty?.adjusted_level ?? entry.difficulty?.display_level ?? entry.lexile ?? 0;
-    if (dl >= displayLevelThreshold || entry.kind === 'entity' || entry.semantic?.cognate_status === 'false_friend') {
-      filteredDict[key] = entry as AnnotationEntry;
-    }
-  }
-
-  const chunks = findPhrasesAndWords(text, filteredDict);
-  const annotationCounts: Record<string, number> = {};
+export function annotateText(text: string, dict: Record<string, any>, annotationCounts: Record<string, number> = {}): ReactNode[] {
+  // Pass all dictionary entries to be matched. Display filtering is handled by CSS.
+  // We still construct the full DOM structure for everything we matched.
+  const chunks = findPhrasesAndWords(text, dict);
 
   return chunks.map((chunk, index) => {
     if (chunk.isMatch && chunk.entry) {
       const key = chunk.text.toLowerCase();
       const count = annotationCounts[key] || 0;
 
+      // Limit to max 2 annotations per page
       if (count >= 2) {
         return <React.Fragment key={index}>{chunk.text}</React.Fragment>;
       }
@@ -108,23 +110,75 @@ export function annotateText(text: string, displayLevelThreshold: number, dict: 
       annotationCounts[key] = count + 1;
       const entry = chunk.entry;
       const trans = entry.semantic?.translation ?? (entry as any).trans ?? '';
-      const pos = entry.pos || '';
       const kind = entry.kind || (entry as any).type || 'word';
+      const level = entry.difficulty?.adjusted_level ?? entry.difficulty?.base_level ?? 500;
 
-      let rtContent = trans;
-      if (kind === 'word' && pos) {
-        rtContent = `${trans} ${pos}`;
+      // Single word or entity (no subwords)
+      if (kind === 'word' || kind === 'entity' || !entry.sub_words || entry.sub_words.length === 0) {
+        const pos = entry.pos || '';
+        let rtContent = trans;
+        if (kind === 'word' && pos) {
+          rtContent = `${trans} ${pos}`;
+        }
+        return (
+          <ruby key={index} className={`annotation-${kind}`} data-level={level}>
+            {chunk.text}
+            <rt>{rtContent}</rt>
+          </ruby>
+        );
       }
-      // Phrases and entities: just translation, no POS
+
+      // Phrase with sub_words (use sibling views)
+      let phraseRemainingText = chunk.text;
+      const wordsViewNodes: ReactNode[] = [];
+
+      for (const sw of entry.sub_words) {
+        // Find the subword in the phrase's text (case insensitive) to retain original casing & punctuation
+        const matchIdx = phraseRemainingText.toLowerCase().indexOf(sw.surface.toLowerCase());
+        if (matchIdx !== -1) {
+          // Push any preceding text/punctuation
+          if (matchIdx > 0) {
+            wordsViewNodes.push(<span key={`pre-${sw.surface}`}>{phraseRemainingText.substring(0, matchIdx)}</span>);
+          }
+          
+          const actualText = phraseRemainingText.substring(matchIdx, matchIdx + sw.surface.length);
+          // Look up translation: either in subword itself or from the global dictionary
+          const swTrans = sw.translation || dict[sw.lemma]?.semantic?.translation || dict[sw.surface]?.semantic?.translation || '';
+          let swRtContent = swTrans;
+          if (sw.pos && swTrans) {
+            swRtContent = `${swTrans} ${sw.pos}`;
+          }
+
+          wordsViewNodes.push(
+            <ruby key={`word-${sw.surface}`} className="word-view annotation-word" data-level={sw.level}>
+              {actualText}
+              <rt>{swRtContent}</rt>
+            </ruby>
+          );
+          
+          phraseRemainingText = phraseRemainingText.substring(matchIdx + sw.surface.length);
+        }
+      }
+      
+      // Push any remaining trailing text
+      if (phraseRemainingText.length > 0) {
+        wordsViewNodes.push(<span key="post">{phraseRemainingText}</span>);
+      }
 
       return (
-        <ruby key={index} className={`annotation-${kind}`}>
-          {chunk.text}
-          <rt>{rtContent}</rt>
-        </ruby>
+        <span key={index} className="annotation-unit" data-phrase-level={level}>
+          <ruby className={`phrase-view annotation-${kind}`} data-level={level}>
+            {chunk.text}
+            <rt>{trans}</rt>
+          </ruby>
+          <span className="words-view">
+            {wordsViewNodes}
+          </span>
+        </span>
       );
     }
 
     return <React.Fragment key={index}>{chunk.text}</React.Fragment>;
   });
 }
+
