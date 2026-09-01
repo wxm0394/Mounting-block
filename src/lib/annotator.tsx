@@ -11,6 +11,7 @@ export interface SubWordEntry {
   level: number;
   pos: string;
   translation?: string;
+  translation_status?: string;
 }
 
 export interface AnnotationEntry {
@@ -147,13 +148,19 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
           const swLevel = Math.round(swRawLevel / 50) * 50;
           // Look up translation: either in subword itself or from the global dictionary
           const swTrans = sw.translation || dict[sw.lemma]?.semantic?.translation || dict[sw.surface]?.semantic?.translation || '';
-          let swRtContent = swTrans;
+          let swRtContent: React.ReactNode = swTrans;
+          let isFailed = sw.translation_status === "failed";
+          
           if (sw.pos && swTrans) {
             swRtContent = `${swTrans} ${sw.pos}`;
           }
+          
+          if (isFailed && !swTrans) {
+            swRtContent = "⚠️";
+          }
 
           wordsViewNodes.push(
-            <ruby key={`word-${sw.surface}`} className="word-view annotation-word" data-level={swLevel}>
+            <ruby key={`word-${sw.surface}`} className="word-view annotation-word" data-level={swLevel} data-translation-failed={isFailed ? "true" : undefined}>
               {actualText}
               <rt>{swRtContent}</rt>
             </ruby>

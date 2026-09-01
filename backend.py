@@ -514,6 +514,7 @@ Words/Phrases to translate:
                 sw_trans = get_cached_translation(sw_key, target_lang) or ""
                 hydrated_sw = dict(sw)
                 hydrated_sw["translation"] = sw_trans
+                hydrated_sw["translation_status"] = "success" if sw_trans else "failed"
                 hydrated_sub_words.append(hydrated_sw)
             entry["sub_words"] = hydrated_sub_words
         
