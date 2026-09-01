@@ -2,12 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { annotateText, MOCK_DICTIONARY } from './lib/annotator';
 import './index.css';
 
-const DEFAULT_TEXT = `Remember how you learned to make money as a kid?
-There was baby-sitting and delivering newspapers. Shoveling snow off the neighbors' sidewalk and driveway. Mowing lawns and taking care of other people's pets and plants when they went on vacation.
-There is one business which, chances are, almost every kid tries at least once in his or her life. A tried and true operation as American as baseball and Mom's apple pie.
-The Lemonade Stand.
-It's this world of childhood, of lemonade stands and sunny days that the author describes in this inspiring book.`;
-
 function paginateText(text: string, charsPerPage = 1200): string[] {
   const paragraphs = text.split(/\n+/).filter(p => p.trim().length > 0);
   const pages: string[] = [];
@@ -42,10 +36,11 @@ function paginateText(text: string, charsPerPage = 1200): string[] {
 }
 
 function App() {
-  const [text, setText] = useState(DEFAULT_TEXT);
+  const [text, setText] = useState('');
   const [displayLevel, setDisplayLevel] = useState<number>(700);
   const [dictionary, setDictionary] = useState<Record<string, any>>(MOCK_DICTIONARY);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
   const pages = useMemo(() => paginateText(text), [text]);
@@ -62,6 +57,7 @@ function App() {
     const abortController = new AbortController();
     const timer = setTimeout(async () => {
       setIsAnalyzing(true);
+      setError(null);
       try {
         const response = await fetch('http://localhost:8000/annotate', {
           method: 'POST',
@@ -74,10 +70,13 @@ function App() {
           if (data.dictionary) {
             setDictionary(data.dictionary);
           }
+        } else {
+          setError(`后端返回错误（status: ${response.status}），请检查后端终端日志`);
         }
       } catch (err: any) {
         if (err.name !== 'AbortError') {
           console.error("Backend unreachable:", err);
+          setError("无法连接后端服务，请检查后端是否已启动");
         }
       } finally {
         setIsAnalyzing(false);
@@ -148,6 +147,11 @@ function App() {
         {/* Right: Reading View */}
         <div className="reading-panel">
           <label>Reading View:</label>
+          {error && (
+            <div style={{ padding: '12px', marginBottom: '16px', backgroundColor: '#fef2f2', color: '#991b1b', borderRadius: '6px', border: '1px solid #fecaca' }}>
+              ⚠️ {error}
+            </div>
+          )}
           <div className="reader-container" data-threshold={displayLevel}>
             {annotatedPage}
           </div>

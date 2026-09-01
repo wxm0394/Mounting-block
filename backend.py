@@ -464,12 +464,13 @@ def batch_translate(annotations: dict[str, dict], target_lang: str, source_text:
                 to_translate.append(sw_key)
 
     if to_translate:
-        client = genai.Client() # Assumes GEMINI_API_KEY is in env
-        chunk_size = 50
-        for i in range(0, len(to_translate), chunk_size):
-            chunk = to_translate[i:i + chunk_size]
-            try:
-                prompt = f"""
+        try:
+            client = genai.Client() # Assumes GEMINI_API_KEY is in env
+            chunk_size = 50
+            for i in range(0, len(to_translate), chunk_size):
+                chunk = to_translate[i:i + chunk_size]
+                try:
+                    prompt = f"""
 Translate the following English words/phrases into {target_lang} based on their context in the source text.
 Return ONLY valid JSON matching the schema.
 
@@ -479,26 +480,28 @@ Source text:
 Words/Phrases to translate:
 {json.dumps(chunk)}
 """
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt,
-                    config=genai.types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=TranslationBatch,
-                        temperature=0.1
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt,
+                        config=genai.types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=TranslationBatch,
+                            temperature=0.1
+                        )
                     )
-                )
-                
-                if response.parsed:
-                    for item in response.parsed.items:
-                        key = item.span.lower()
-                        # 锚定校验 1: 确保返回的短语是我们需要翻译的短语 (防漂移)
-                        if key in chunk:
-                            # 锚定校验 2: 确保该短语确实存在于源文中 (防模型编造幻觉)
-                            if key in source_text.lower():
-                                set_cached_translation(key, target_lang, item.translation)
-            except Exception as e:
-                print(f"Gemini translation batch {i//chunk_size} failed: {e}")
+                    
+                    if response.parsed:
+                        for item in response.parsed.items:
+                            key = item.span.lower()
+                            # 锚定校验 1: 确保返回的短语是我们需要翻译的短语 (防漂移)
+                            if key in chunk:
+                                # 锚定校验 2: 确保该短语确实存在于源文中 (防模型编造幻觉)
+                                if key in source_text.lower():
+                                    set_cached_translation(key, target_lang, item.translation)
+                except Exception as e:
+                    print(f"Gemini translation batch {i//chunk_size} failed: {e}")
+        except Exception as e:
+            print(f"Gemini translation failed to initialize or execute: {e}")
 
     result = {}
     lang_prefix = target_lang.lower().split('-')[0]
