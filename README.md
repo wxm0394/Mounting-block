@@ -24,6 +24,12 @@ The application relies on the Gemini API to fetch contextual translations. Expor
 export GEMINI_API_KEY="your-api-key-here"
 ```
 
+### 4. Optional: Set Gemini Model
+By default, the application uses `gemini-2.5-flash-lite`. You can switch to a different model (e.g., `gemini-2.5-flash`) by setting the `GEMINI_MODEL` environment variable. Note that in the future, if the 2.5 series is deprecated, you only need to change this environment variable without modifying any code.
+```bash
+export GEMINI_MODEL="gemini-2.5-flash-lite"
+```
+
 ## Running the Application
 
 You will need two separate terminal windows, one for the backend and one for the frontend.

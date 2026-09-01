@@ -481,7 +481,7 @@ Words/Phrases to translate:
 {json.dumps(chunk)}
 """
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite"),
                         contents=prompt,
                         config=genai.types.GenerateContentConfig(
                             response_mime_type="application/json",
