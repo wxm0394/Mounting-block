@@ -27,6 +27,16 @@ export interface AnnotationEntry {
 
 export const MOCK_DICTIONARY: Record<string, AnnotationEntry> = {};
 
+function composeRtContent(trans: string, pos: string, translationStatus: string | undefined, allowPos: boolean): React.ReactNode {
+  if (trans) {
+    return allowPos && pos ? `${trans} ${pos}` : trans;
+  }
+  if (translationStatus === "failed") {
+    return "⚠️";
+  }
+  return "";
+}
+
 // Match phrases and words from the dynamic dictionary against the text.
 // Phrases (multi-word & hyphenated) are matched first by longest-match.
 function findPhrasesAndWords(text: string, dict: Record<string, AnnotationEntry>): { text: string; isMatch: boolean; entry?: AnnotationEntry }[] {
@@ -118,12 +128,10 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
       // Single word or entity (no subwords)
       if (kind === 'word' || kind === 'entity' || !entry.sub_words || entry.sub_words.length === 0) {
         const pos = entry.pos || '';
-        let rtContent = trans;
-        if (kind === 'word' && pos) {
-          rtContent = `${trans} ${pos}`;
-        }
+        const rtContent = composeRtContent(trans, pos, entry.semantic?.translation_status, kind === 'word');
+        const isFailed = entry.semantic?.translation_status === 'failed';
         return (
-          <ruby key={index} className={`annotation-${kind}`} data-level={level}>
+          <ruby key={index} className={`annotation-${kind}`} data-level={level} data-translation-failed={isFailed ? "true" : undefined}>
             {chunk.text}
             <rt>{rtContent}</rt>
           </ruby>
@@ -148,16 +156,8 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
           const swLevel = Math.round(swRawLevel / 50) * 50;
           // Look up translation: either in subword itself or from the global dictionary
           const swTrans = sw.translation || dict[sw.lemma]?.semantic?.translation || dict[sw.surface]?.semantic?.translation || '';
-          let swRtContent: React.ReactNode = swTrans;
-          let isFailed = sw.translation_status === "failed";
-          
-          if (sw.pos && swTrans) {
-            swRtContent = `${swTrans} ${sw.pos}`;
-          }
-          
-          if (isFailed && !swTrans) {
-            swRtContent = "⚠️";
-          }
+          const isFailed = sw.translation_status === "failed";
+          const swRtContent = composeRtContent(swTrans, sw.pos, sw.translation_status, true);
 
           wordsViewNodes.push(
             <ruby key={`word-${sw.surface}`} className="word-view annotation-word" data-level={swLevel} data-translation-failed={isFailed ? "true" : undefined}>
@@ -175,11 +175,14 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
         wordsViewNodes.push(<span key="post">{phraseRemainingText}</span>);
       }
 
+      const phraseIsFailed = entry.semantic?.translation_status === "failed";
+      const phraseRtContent = composeRtContent(trans, entry.pos, entry.semantic?.translation_status, false);
+
       return (
         <span key={index} className="annotation-unit" data-phrase-level={level}>
-          <ruby className={`phrase-view annotation-${kind}`} data-level={level}>
+          <ruby className={`phrase-view annotation-${kind}`} data-level={level} data-translation-failed={phraseIsFailed ? "true" : undefined}>
             {chunk.text}
-            <rt>{trans}</rt>
+            <rt>{phraseRtContent}</rt>
           </ruby>
           <span className="words-view">
             {wordsViewNodes}
