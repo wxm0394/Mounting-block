@@ -33,6 +33,7 @@ class AnnotationRequest(BaseModel):
     target_lang: str = "zh-Hans"   # target native language for translation
 
 import sqlite3
+import hashlib
 import os
 
 CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "translation_cache.db")
@@ -43,23 +44,24 @@ def init_db():
             CREATE TABLE IF NOT EXISTS translations (
                 key TEXT,
                 target_lang TEXT,
+                doc_hash TEXT,
                 translation TEXT,
-                PRIMARY KEY (key, target_lang)
+                PRIMARY KEY (key, target_lang, doc_hash)
             )
         """)
 
 init_db()
 
-def get_cached_translation(key: str, target_lang: str) -> str:
+def get_cached_translation(key: str, target_lang: str, doc_hash: str) -> str:
     with sqlite3.connect(CACHE_DB_PATH) as conn:
-        cursor = conn.execute("SELECT translation FROM translations WHERE key=? AND target_lang=?", (key, target_lang))
+        cursor = conn.execute("SELECT translation FROM translations WHERE key=? AND target_lang=? AND doc_hash=?", (key, target_lang, doc_hash))
         row = cursor.fetchone()
         return row[0] if row else None
 
-def set_cached_translation(key: str, target_lang: str, translation: str):
+def set_cached_translation(key: str, target_lang: str, doc_hash: str, translation: str):
     with sqlite3.connect(CACHE_DB_PATH) as conn:
-        conn.execute("INSERT OR REPLACE INTO translations (key, target_lang, translation) VALUES (?, ?, ?)",
-                     (key, target_lang, translation))
+        conn.execute("INSERT OR REPLACE INTO translations (key, target_lang, doc_hash, translation) VALUES (?, ?, ?, ?)",
+                     (key, target_lang, doc_hash, translation))
 
 # ── A1-level ultra-common lemmas that NEVER need annotation ───────────
 STOP_LEMMAS = {
@@ -452,15 +454,16 @@ class TranslationBatch(BaseModel):
     items: list[TranslationItem]
 
 def batch_translate(annotations: dict[str, dict], target_lang: str, source_text: str) -> dict[str, dict]:
+    doc_hash = hashlib.md5(source_text.encode()).hexdigest()
     to_translate = []
     # Collect all top-level keys
     for key in annotations:
-        if get_cached_translation(key, target_lang) is None:
+        if get_cached_translation(key, target_lang, doc_hash) is None:
             to_translate.append(key)
         # Also collect all sub_words
         for sw in annotations[key].get("sub_words", []):
             sw_key = sw["surface"].lower()
-            if get_cached_translation(sw_key, target_lang) is None and sw_key not in to_translate:
+            if get_cached_translation(sw_key, target_lang, doc_hash) is None and sw_key not in to_translate:
                 to_translate.append(sw_key)
 
     if to_translate:
@@ -497,7 +500,7 @@ Words/Phrases to translate:
                             if key in chunk:
                                 # 锚定校验 2: 确保该短语确实存在于源文中 (防模型编造幻觉)
                                 if key in source_text.lower():
-                                    set_cached_translation(key, target_lang, item.translation)
+                                    set_cached_translation(key, target_lang, doc_hash, item.translation)
                 except Exception as e:
                     print(f"Gemini translation batch {i//chunk_size} failed: {e}")
         except Exception as e:
@@ -506,7 +509,7 @@ Words/Phrases to translate:
     result = {}
     lang_prefix = target_lang.lower().split('-')[0]
     for key, meta in annotations.items():
-        trans = get_cached_translation(key, target_lang) or ""
+        trans = get_cached_translation(key, target_lang, doc_hash) or ""
         entry = dict(meta)
         
         # Hydrate sub_words translation
@@ -514,7 +517,7 @@ Words/Phrases to translate:
             hydrated_sub_words = []
             for sw in entry["sub_words"]:
                 sw_key = sw["surface"].lower()
-                sw_trans = get_cached_translation(sw_key, target_lang) or ""
+                sw_trans = get_cached_translation(sw_key, target_lang, doc_hash) or ""
                 hydrated_sw = dict(sw)
                 hydrated_sw["translation"] = sw_trans
                 hydrated_sw["translation_status"] = "success" if sw_trans else "failed"
