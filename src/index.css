@@ -175,10 +175,19 @@ body {
   color: #e4e4e7;
   border-radius: 10px;
   border: 1px solid #27272a;
-  white-space: pre-wrap;
+  white-space: normal;
   font-family: Georgia, 'Times New Roman', Times, serif;
   min-height: 400px;
   overflow-y: auto;
+}
+
+.reader-paragraph {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+}
+
+.reader-paragraph:last-child {
+  margin-bottom: 0;
 }
 
 /* ── Ruby annotation styles ─────────────────────────────────────── */

@@ -90,7 +90,15 @@ function App() {
   }, [text]);
 
   const currentPageText = pages[currentPageIndex] || "";
-  const annotatedPage = useMemo(() => annotateText(currentPageText, dictionary), [currentPageText, dictionary]);
+  const annotatedPage = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const paragraphs = currentPageText.split(/\n+/).filter(p => p.trim().length > 0);
+    return paragraphs.map((p, idx) => (
+      <p key={idx} className="reader-paragraph">
+        {annotateText(p, dictionary, counts)}
+      </p>
+    ));
+  }, [currentPageText, dictionary]);
 
   return (
     <div className="app-container">

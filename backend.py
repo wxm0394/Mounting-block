@@ -232,20 +232,23 @@ def analyze_text(text: str):
             chunk_text = chunk.text.strip().lower()
             lemma = " ".join(t.lemma_.lower() for t in chunk if t.pos_ != "DET")
             if len(chunk) == 1:
+                score = compute_difficulty_score(chunk_text)
                 annotations[chunk_text] = make_annotation(
-                    chunk_text, lemma, "entity", 1500, pos="n."
+                    chunk_text, lemma, "entity", difficulty_to_display_level(score), pos="n."
                 )
             else:
+                score = compute_difficulty_score(chunk_text)
                 annotations[chunk_text] = make_annotation(
-                    chunk_text, lemma, "entity", 1500
+                    chunk_text, lemma, "entity", difficulty_to_display_level(score)
                 )
             for i in range(chunk.start, chunk.end):
                 consumed.add(i)
 
     for token in doc:
         if token.pos_ == "PROPN" and token.i not in consumed:
+            score = compute_difficulty_score(token.text)
             annotations[token.text.lower()] = make_annotation(
-                token.text.lower(), token.lemma_.lower(), "entity", 1500, pos="n."
+                token.text.lower(), token.lemma_.lower(), "entity", difficulty_to_display_level(score), pos="n."
             )
             consumed.add(token.i)
 
