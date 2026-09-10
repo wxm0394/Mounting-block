@@ -180,10 +180,10 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
 
       return (
         <span key={index} className="annotation-unit" data-phrase-level={level}>
-          <ruby className={`phrase-view annotation-${kind}`} data-level={level} data-translation-failed={phraseIsFailed ? "true" : undefined}>
+          <span className={`phrase-view annotation-${kind}`} data-level={level} data-translation-failed={phraseIsFailed ? "true" : undefined}>
             {chunk.text}
-            <rt>{phraseRtContent}</rt>
-          </ruby>
+            <span className="phrase-rt">{phraseRtContent}</span>
+          </span>
           <span className="words-view">
             {wordsViewNodes}
           </span>
