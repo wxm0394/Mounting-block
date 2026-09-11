@@ -8,13 +8,24 @@ Architecture:
   - Multi-pass pipeline: PASS 0 (NER/PROPN) → 1 (hyphenated) → 2 (lexicalized phrases) → 3 (adjacent merge) → 4 (single words)
   - API returns FULL dictionary regardless of threshold; frontend handles filtering.
 """
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import re
 import spacy
+import json
+import hashlib
+import sqlite3
+import os
+import sys
 from wordfreq import zipf_frequency
 import concurrent.futures
+
+# Redirect stdout to a file for debugging
+log_file = open('/tmp/backend_debug.log', 'a', buffering=1)
+sys.stdout = log_file
+sys.stderr = log_file
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -55,6 +66,10 @@ init_db()
 def get_cached_translation(key: str, target_lang: str, doc_hash: str) -> str:
     with sqlite3.connect(CACHE_DB_PATH) as conn:
         cursor = conn.execute("SELECT translation FROM translations WHERE key=? AND target_lang=? AND doc_hash=?", (key, target_lang, doc_hash))
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        cursor = conn.execute("SELECT translation FROM translations WHERE key=? AND target_lang=? LIMIT 1", (key, target_lang))
         row = cursor.fetchone()
         return row[0] if row else None
 
@@ -478,7 +493,13 @@ def batch_translate(annotations: dict[str, dict], target_lang: str, source_text:
                 try:
                     prompt = f"""
 Translate the following English words/phrases into {target_lang} based on their context in the source text.
-Return ONLY valid JSON matching the schema.
+Return ONLY valid JSON matching exactly this schema:
+{{
+  "items": [
+    {{"span": "word or phrase", "translation": "translated text"}},
+    ...
+  ]
+}}
 
 Source text:
 {source_text}
@@ -486,26 +507,57 @@ Source text:
 Words/Phrases to translate:
 {json.dumps(chunk)}
 """
-                    response = client.models.generate_content(
-                        model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite"),
-                        contents=prompt,
-                        config=genai.types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            response_schema=TranslationBatch,
-                            temperature=0.1
-                        )
-                    )
+                    response = None
+                    import time
+                    for attempt in range(3):
+                        try:
+                            response = client.models.generate_content(
+                                model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                                contents=prompt,
+                                config=genai.types.GenerateContentConfig(
+                                    response_mime_type="application/json",
+                                    temperature=0.1
+                                )
+                            )
+                            break # Success!
+                        except Exception as e:
+                            print(f"Gemini translation batch {i//chunk_size} attempt {attempt+1} failed: {e}")
+                            if attempt < 2:
+                                time.sleep(2 ** attempt) # Exponential backoff: 1s, 2s
+                            else:
+                                raise e # Re-raise if all attempts fail
                     
-                    if response.parsed:
-                        for item in response.parsed.items:
-                            key = item.span.lower()
+                    if response and response.text:
+                        try:
+                            clean_text = response.text.strip()
+                            if clean_text.startswith("```json"):
+                                clean_text = clean_text[7:]
+                            elif clean_text.startswith("```"):
+                                clean_text = clean_text[3:]
+                            if clean_text.endswith("```"):
+                                clean_text = clean_text[:-3]
+                            parsed_json = json.loads(clean_text)
+                            items = parsed_json.get("items", [])
+                        except Exception as parse_err:
+                            print(f"JSON Parse Error in batch {i//chunk_size}: {parse_err}. Response was: {response.text}")
+                            items = []
+                        for item in items:
+                            key = item.get("span", "").lower()
                             # 锚定校验 1: 确保返回的短语是我们需要翻译的短语 (防漂移)
                             if key in chunk:
                                 # 锚定校验 2: 确保该短语确实存在于源文中 (防模型编造幻觉)
                                 if key in source_text.lower():
-                                    set_cached_translation(key, target_lang, doc_hash, item.translation)
+                                    set_cached_translation(key, target_lang, doc_hash, item.get("translation", ""))
+                                else:
+                                    print(f"Key '{key}' not in source text")
+                            else:
+                                print(f"Key '{key}' not in chunk")
                 except Exception as e:
                     print(f"Gemini translation batch {i//chunk_size} failed: {e}")
+                
+                # Sleep to prevent rate limiting
+                import time
+                time.sleep(2)
         except Exception as e:
             print(f"Gemini translation failed to initialize or execute: {e}")
 

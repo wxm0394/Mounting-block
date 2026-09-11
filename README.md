@@ -6,45 +6,57 @@ ReadLevel is a reading assistance tool that automatically detects difficult Engl
 
 Follow these steps to set up the project locally:
 
-### 1. Install Backend Dependencies
-Make sure you have Python installed, then install the required packages:
-```bash
-pip install -r requirements.txt
-```
+### 1. Python Environment Setup (Virtual Environment)
+In Debian/Kali and modern Linux distributions, global package installation is blocked (`externally-managed-environment` / PEP 668). **Always use the project's virtual environment**:
 
-### 2. Download spaCy Model
-The backend uses spaCy for linguistic analysis. You need to download the English model:
+If `venv` is already initialized in the repository, you can skip to Step 3. Otherwise, create and set it up:
 ```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
 
-### 3. Set Gemini API Key
-The application relies on the Gemini API to fetch contextual translations. Export your API key in your terminal before running the backend:
+### 2. Set Environment Variables
+The application relies on the Gemini API to fetch contextual translations:
 ```bash
 export GEMINI_API_KEY="your-api-key-here"
-```
-
-### 4. Optional: Set Gemini Model
-By default, the application uses `gemini-2.5-flash-lite`. You can switch to a different model (e.g., `gemini-2.5-flash`) by setting the `GEMINI_MODEL` environment variable. Note that in the future, if the 2.5 series is deprecated, you only need to change this environment variable without modifying any code.
-```bash
+# Optional (default is gemini-2.5-flash-lite)
 export GEMINI_MODEL="gemini-2.5-flash-lite"
 ```
 
 ## Running the Application
 
-You will need two separate terminal windows, one for the backend and one for the frontend.
+You will need two separate terminal windows: one for the backend and one for the frontend.
 
 ### Start the Backend
-In the root directory of this project (where `backend.py` is located), start the FastAPI server:
+
+**Option A (Fastest, no activation required):**
 ```bash
-uvicorn backend:app --reload
+export GEMINI_API_KEY="your-api-key-here"
+./venv/bin/uvicorn backend:app --reload --port 8000
+```
+
+**Option B (Standard via virtualenv activation):**
+```bash
+source venv/bin/activate
+export GEMINI_API_KEY="your-api-key-here"
+uvicorn backend:app --reload --port 8000
 ```
 *(The backend runs on `http://localhost:8000`)*
 
+> **Tip: If you see `[Errno 98] Address already in use`**:
+> The 8000 port is still occupied by a previous process. Kill it with:
+> ```bash
+> fuser -k 8000/tcp
+> # or: lsof -ti :8000 | xargs kill -9
+> ```
+
 ### Start the Frontend
-In a new terminal window, start the Vite development server:
+
+In a new terminal window, start the Vite development server (using polling mode to avoid file limit errors):
 ```bash
-npm run dev
+CHOKIDAR_USEPOLLING=true npm run dev
 ```
 *(The frontend runs on `http://localhost:5173`)*
 

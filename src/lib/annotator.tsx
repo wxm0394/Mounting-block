@@ -131,10 +131,10 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
         const rtContent = composeRtContent(trans, pos, entry.semantic?.translation_status, kind === 'word');
         const isFailed = entry.semantic?.translation_status === 'failed';
         return (
-          <ruby key={index} className={`annotation-${kind}`} data-level={level} data-translation-failed={isFailed ? "true" : undefined}>
+          <span key={index} className={`annotation-view annotation-${kind}`} data-level={level} data-translation-failed={isFailed ? "true" : undefined}>
             {chunk.text}
-            <rt>{rtContent}</rt>
-          </ruby>
+            <span className="annotation-rt">{rtContent}</span>
+          </span>
         );
       }
 
@@ -160,10 +160,10 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
           const swRtContent = composeRtContent(swTrans, sw.pos, sw.translation_status, true);
 
           wordsViewNodes.push(
-            <ruby key={`word-${sw.surface}`} className="word-view annotation-word" data-level={swLevel} data-translation-failed={isFailed ? "true" : undefined}>
+            <span key={`word-${sw.surface}`} className="word-view annotation-view annotation-word" data-level={swLevel} data-translation-failed={isFailed ? "true" : undefined}>
               {actualText}
-              <rt>{swRtContent}</rt>
-            </ruby>
+              <span className="annotation-rt">{swRtContent}</span>
+            </span>
           );
           
           phraseRemainingText = phraseRemainingText.substring(matchIdx + sw.surface.length);
@@ -180,9 +180,9 @@ export function annotateText(text: string, dict: Record<string, any>, annotation
 
       return (
         <span key={index} className="annotation-unit" data-phrase-level={level}>
-          <span className={`phrase-view annotation-${kind}`} data-level={level} data-translation-failed={phraseIsFailed ? "true" : undefined}>
+          <span className={`phrase-view annotation-view annotation-${kind}`} data-level={level} data-translation-failed={phraseIsFailed ? "true" : undefined}>
             {chunk.text}
-            <span className="phrase-rt">{phraseRtContent}</span>
+            <span className="annotation-rt">{phraseRtContent}</span>
           </span>
           <span className="words-view">
             {wordsViewNodes}
