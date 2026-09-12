@@ -46,11 +46,13 @@ class AnnotationRequest(BaseModel):
 import sqlite3
 import hashlib
 import os
+from contextlib import contextmanager
 
 CACHE_DB_PATH = os.path.join(os.path.dirname(__file__), "translation_cache.db")
 
 def init_db():
-    with sqlite3.connect(CACHE_DB_PATH) as conn:
+    with sqlite3.connect(CACHE_DB_PATH, check_same_thread=False) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS translations (
                 key TEXT,
@@ -63,8 +65,16 @@ def init_db():
 
 init_db()
 
+@contextmanager
+def get_db_connection():
+    conn = sqlite3.connect(CACHE_DB_PATH, check_same_thread=False, timeout=10.0)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 def get_cached_translation(key: str, target_lang: str, doc_hash: str) -> str:
-    with sqlite3.connect(CACHE_DB_PATH) as conn:
+    with get_db_connection() as conn:
         cursor = conn.execute("SELECT translation FROM translations WHERE key=? AND target_lang=? AND doc_hash=?", (key, target_lang, doc_hash))
         row = cursor.fetchone()
         if row:
@@ -74,9 +84,10 @@ def get_cached_translation(key: str, target_lang: str, doc_hash: str) -> str:
         return row[0] if row else None
 
 def set_cached_translation(key: str, target_lang: str, doc_hash: str, translation: str):
-    with sqlite3.connect(CACHE_DB_PATH) as conn:
+    with get_db_connection() as conn:
         conn.execute("INSERT OR REPLACE INTO translations (key, target_lang, doc_hash, translation) VALUES (?, ?, ?, ?)",
                      (key, target_lang, doc_hash, translation))
+        conn.commit()
 
 # ── A1-level ultra-common lemmas that NEVER need annotation ───────────
 STOP_LEMMAS = {
