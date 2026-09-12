@@ -5,3 +5,6 @@ venv/
 *.db
 *.db-*
 .env
+.env.*
+.env.local
+!.env.example
