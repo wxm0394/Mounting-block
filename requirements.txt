@@ -4,3 +4,5 @@ spacy
 wordfreq
 google-genai
 pydantic
+pydantic-settings
+supabase

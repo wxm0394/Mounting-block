@@ -9,9 +9,12 @@ Architecture:
   - API returns FULL dictionary regardless of threshold; frontend handles filtering.
 """
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 import re
 import spacy
 import json
@@ -39,9 +42,75 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class Settings(BaseSettings):
+    supabase_url: str
+    supabase_service_role_key: str
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash-lite"
+    
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+settings = Settings()
+
+from supabase import create_client, Client
+supabase: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verifies JWT token with Supabase and returns the user object."""
+    token = credentials.credentials
+    try:
+        user_res = supabase.auth.get_user(token)
+        if not user_res or not user_res.user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        return user_res.user
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Authentication failed: {str(e)}"
+        )
+
+def get_user_profile(user_id: str):
+    res = supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
+    if res.data:
+        return res.data[0]
+    return {"is_subscribed": False, "daily_char_limit": 5000}
+
+import logging
+
+logger = logging.getLogger("uvicorn.error")
+
+from datetime import datetime, timezone
+
+def try_consume_quota(user_id: str, char_count: int, limit: int):
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    try:
+        # Atomic RPC call (Requires consume_quota function in DB)
+        res = supabase.rpc(
+            "consume_quota",
+            {"p_user_id": user_id, "p_today": today_str, "p_chars_to_add": char_count, "p_limit": limit}
+        ).execute()
+        return res.data # Returns integer (new usage) or None (exceeded)
+    except Exception as e:
+        # Fallback (non-atomic) if RPC doesn't exist
+        logger.warning(f"RPC fallback used for quota: {e}")
+        res = supabase.table("daily_usage").select("chars_used").eq("user_id", user_id).eq("usage_date", today_str).execute()
+        current = res.data[0]["chars_used"] if res.data else 0
+        if current + char_count > limit:
+            return None
+        supabase.table("daily_usage").upsert({
+            "user_id": user_id,
+            "usage_date": today_str,
+            "chars_used": current + char_count
+        }).execute()
+        return current + char_count
+
 class AnnotationRequest(BaseModel):
     text: str
     target_lang: str = "zh-Hans"   # target native language for translation
+
 
 import sqlite3
 import hashlib
@@ -523,7 +592,7 @@ Words/Phrases to translate:
                     for attempt in range(3):
                         try:
                             response = client.models.generate_content(
-                                model=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+                                model=settings.gemini_model,
                                 contents=prompt,
                                 config=genai.types.GenerateContentConfig(
                                     response_mime_type="application/json",
@@ -615,12 +684,46 @@ Words/Phrases to translate:
 
 # ── API endpoint ──────────────────────────────────────────────────────
 @app.post("/annotate")
-def annotate_endpoint(req: AnnotationRequest):
+def annotate_endpoint(req: AnnotationRequest, user = Depends(get_current_user)):
     """
     Returns the FULL annotation dictionary for the given text.
-    No threshold filtering — the frontend handles display level filtering via CSS/JS.
+    Checks user quota before processing.
     """
+    profile = get_user_profile(user.id)
+    
+    if not profile.get("is_subscribed"):
+        limit = profile.get("daily_char_limit", 5000)
+        char_count = len(req.text)
+        result = try_consume_quota(user.id, char_count, limit)
+        
+        if result is None:
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            res = supabase.table("daily_usage").select("chars_used").eq("user_id", user.id).eq("usage_date", today_str).execute()
+            current = res.data[0]["chars_used"] if res.data else 0
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "daily_quota_exceeded",
+                    "message": "今日免费额度已用完",
+                    "chars_used": current,
+                    "chars_limit": limit,
+                    "resets_at": "UTC 00:00 (北京时间 08:00)"
+                }
+            )
+        chars_used = result
+    else:
+        chars_used = 0 # Subscribed users don't consume chars_used
+        limit = profile.get("daily_char_limit", 50000) # Use actual limit instead of string
+
     annotations = analyze_text(req.text)
     adjusted = apply_target_lang_adjustments(annotations, req.target_lang)
     enriched = batch_translate(adjusted, req.target_lang, req.text)
-    return {"dictionary": enriched}
+    
+    return {
+        "dictionary": enriched,
+        "usage": {
+            "chars_used": chars_used,
+            "chars_limit": limit
+        }
+    }
+
