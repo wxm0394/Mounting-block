@@ -215,6 +215,17 @@ LEXICALIZED_PHRASES = {
     "take advantage of", "make use of", "take part in", "come to terms with",
 }
 
+# ── Complex prepositions for PASS 2.5 ─────────────────────────────────
+# Note: Although some items here (e.g., "on behalf of") might look like they
+# overlap with LEXICALIZED_PHRASES, it is safe because PASS 2 matching 
+# strictly requires a verb as the root, so it won't conflict with pure prepositions.
+COMPLEX_PREPOSITIONS = {
+    "under cover of", "in the name of", "on behalf of", "in front of",
+    "in spite of", "by means of", "for the sake of", "with regard to",
+    "in addition to", "in light of", "due to", "instead of",
+    "regardless of", "prior to", "subsequent to"
+}
+
 # ── Difficulty Score engine ───────────────────────────────────────────
 def compute_difficulty_score(word: str) -> float:
     """
@@ -300,6 +311,16 @@ def make_annotation(surface: str, lemma: str, kind: str, base_level: int,
     }
 
 # ── Lexicalized phrase detection ──────────────────────────────────────
+# TODO (Known Bug): This function contains a greedy consumption bug. 
+# If a verb has any `prt` child, it indiscriminately returns True. Because the 
+# PASS 2 builder forcibly appends all `prep`+`pobj` branches of the verb, a 
+# phrasal verb with a particle (e.g., "give up") will greedily swallow any 
+# following adverbial prepositional phrases (e.g., "under cover of darkness"), 
+# causing them to be falsely merged into the verb phrase.
+#
+# TODO (Limitation): PASS 2.5 A (Complex Prepositions) currently only recognizes 
+# `pobj` (noun objects). It does not recognize `pcomp` (e.g., gerunds like 
+# "instead of complaining"), so those structures won't be successfully merged yet.
 def is_lexicalized_phrase(phrase_text: str, verb_token) -> bool:
     """
     Check if a verb phrase is a lexicalized unit (idiom/collocation)
@@ -424,6 +445,125 @@ def analyze_text(text: str):
                             sub_words=sub_words
                         )
                         consumed.update(span_indices)
+
+    # ── PASS 2.5: Syntactic Modifier Merge ───────────────────────────
+    # A. Complex Prepositions
+    text_lower = text.lower()
+    for cp in COMPLEX_PREPOSITIONS:
+        for m in re.finditer(r'\b' + re.escape(cp) + r'\b', text_lower):
+            cp_tokens = [t for t in doc if t.idx >= m.start() and (t.idx + len(t.text)) <= m.end()]
+            if not cp_tokens: continue
+            
+            cp_indices = set(t.i for t in cp_tokens)
+            if not cp_indices.isdisjoint(consumed):
+                continue
+                
+            last_cp_token = cp_tokens[-1]
+            pobj_tokens = []
+            
+            for child in last_cp_token.children:
+                if child.dep_ == "pobj":
+                    pobj_tokens = list(child.subtree)
+                    break
+                    
+            if pobj_tokens:
+                pobj_indices = set(t.i for t in pobj_tokens)
+                if pobj_indices.isdisjoint(consumed):
+                    start_i = min(cp_tokens[0].i, pobj_tokens[0].i)
+                    end_i = max(cp_tokens[-1].i, pobj_tokens[-1].i)
+                    span_tokens = doc[start_i:end_i+1]
+                    span_indices = set(range(start_i, end_i+1))
+                    
+                    if span_indices.isdisjoint(consumed):
+                        phrase_text = span_tokens.text.strip().lower()
+                        
+                        content_words = [t for t in span_tokens if t.lemma_.lower() not in STOP_LEMMAS and len(t.text) >= 4]
+                        if content_words:
+                            avg_score = sum(compute_difficulty_score(t.lemma_) for t in content_words) / len(content_words)
+                        else:
+                            avg_score = 0.0
+                            
+                        lemma = " ".join(t.lemma_.lower() for t in span_tokens if t.pos_ not in ("PUNCT", "SPACE"))
+                        sub_words = []
+                        for t in span_tokens:
+                            if t.pos_ not in ("PUNCT", "SPACE", "SYM", "NUM") and len(t.text) >= 4 and t.lemma_.lower() not in STOP_LEMMAS:
+                                sw_score = compute_difficulty_score(t.lemma_)
+                                sub_words.append({
+                                    "surface": t.text.lower(),
+                                    "lemma": t.lemma_.lower(),
+                                    "level": difficulty_to_display_level(sw_score),
+                                    "pos": get_pos_label(t)
+                                })
+                                
+                        annotations[phrase_text] = make_annotation(
+                            phrase_text, lemma, "phrase", difficulty_to_display_level(avg_score),
+                            pattern="COMPLEX_PREP", sub_words=sub_words
+                        )
+                        consumed.update(span_indices)
+
+    # B. Syntactic Modifiers (amod, advmod, compound)
+    for head in doc:
+        if head.i in consumed:
+            continue
+            
+        # Only start from the top of a modifier chain
+        if head.dep_ in ("amod", "advmod", "compound"):
+            continue
+            
+        cluster = []
+        queue = [head]
+        while queue:
+            curr = queue.pop(0)
+            if curr not in cluster:
+                cluster.append(curr)
+            for child in curr.children:
+                if child.dep_ in ("amod", "advmod", "compound"):
+                    queue.append(child)
+                    
+        if len(cluster) >= 2 and len(cluster) <= 5:
+            cluster.sort(key=lambda t: t.i)
+            if any(t.i in consumed for t in cluster):
+                continue
+                
+            start_i = cluster[0].i
+            end_i = cluster[-1].i
+            
+            is_contiguous = True
+            for i in range(start_i, end_i + 1):
+                if doc[i] not in cluster and doc[i].pos_ not in ("PUNCT", "SPACE"):
+                    is_contiguous = False
+                    break
+                    
+            if is_contiguous:
+                if any(is_difficult_token(t, 20.0) for t in cluster):
+                    span_indices = set(range(start_i, end_i + 1))
+                    span_tokens = doc[start_i:end_i+1]
+                    
+                    phrase_text = span_tokens.text.strip().lower()
+                    
+                    content_words = [t for t in cluster if t.lemma_.lower() not in STOP_LEMMAS and len(t.text) >= 4]
+                    if content_words:
+                        avg_score = sum(compute_difficulty_score(t.lemma_) for t in content_words) / len(content_words)
+                    else:
+                        avg_score = 0.0
+                        
+                    lemma = " ".join(t.lemma_.lower() for t in span_tokens if t.pos_ not in ("PUNCT", "SPACE"))
+                    sub_words = []
+                    for t in span_tokens:
+                        if t.pos_ not in ("PUNCT", "SPACE", "SYM", "NUM") and len(t.text) >= 4 and t.lemma_.lower() not in STOP_LEMMAS:
+                            sw_score = compute_difficulty_score(t.lemma_)
+                            sub_words.append({
+                                "surface": t.text.lower(),
+                                "lemma": t.lemma_.lower(),
+                                "level": difficulty_to_display_level(sw_score),
+                                "pos": get_pos_label(t)
+                            })
+                            
+                    annotations[phrase_text] = make_annotation(
+                        phrase_text, lemma, "phrase", difficulty_to_display_level(avg_score),
+                        pattern="MODIFIER", sub_words=sub_words
+                    )
+                    consumed.update(span_indices)
 
     # ── PASS 3: Adjacent difficult words merge (max 3 words) ─────────
     tokens = list(doc)
