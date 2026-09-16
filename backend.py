@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()
+if settings.gemini_api_key and not os.environ.get("GEMINI_API_KEY"):
+    os.environ["GEMINI_API_KEY"] = settings.gemini_api_key
 
 from supabase import create_client, Client
 supabase: Client = create_client(settings.supabase_url, settings.supabase_service_role_key)
@@ -706,7 +708,7 @@ def batch_translate(annotations: dict[str, dict], target_lang: str, source_text:
 
     if to_translate:
         try:
-            client = genai.Client() # Assumes GEMINI_API_KEY is in env
+            client = genai.Client(api_key=settings.gemini_api_key or os.environ.get("GEMINI_API_KEY"))
             chunk_size = 50
             for i in range(0, len(to_translate), chunk_size):
                 chunk = to_translate[i:i + chunk_size]
@@ -759,8 +761,24 @@ Words/Phrases to translate:
                             parsed_json = json.loads(clean_text)
                             items = parsed_json.get("items", [])
                         except Exception as parse_err:
-                            print(f"JSON Parse Error in batch {i//chunk_size}: {parse_err}. Response was: {response.text}")
+                            print(f"JSON Parse Error in batch {i//chunk_size}: {parse_err}. Attempting regex fallback...")
+                            pattern = r'\{\s*"span"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"translation"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}'
+                            matches = re.findall(pattern, clean_text)
+                            if not matches:
+                                pattern_rev = r'\{\s*"translation"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"span"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}'
+                                matches = [(s, t) for t, s in re.findall(pattern_rev, clean_text)]
                             items = []
+                            for s, t in matches:
+                                try:
+                                    s = json.loads(f'"{s}"')
+                                    t = json.loads(f'"{t}"')
+                                except Exception:
+                                    pass
+                                items.append({"span": s, "translation": t})
+                            if not items:
+                                print(f"Regex fallback failed to extract items. Response was: {response.text}")
+                            else:
+                                print(f"Regex fallback recovered {len(items)} items from malformed response.")
                         for item in items:
                             key = item.get("span", "").lower()
                             # 锚定校验 1: 确保返回的短语是我们需要翻译的短语 (防漂移)
