@@ -9,11 +9,12 @@ Architecture:
   - API returns FULL dictionary regardless of threshold; frontend handles filtering.
 """
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import uuid
 
 import re
 import spacy
@@ -74,10 +75,16 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         )
 
 def get_user_profile(user_id: str):
-    res = supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
-    if res.data:
-        return res.data[0]
-    return {"is_subscribed": False, "daily_char_limit": 5000}
+    for attempt in range(3):
+        try:
+            res = supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
+            if res.data:
+                return res.data[0]
+            return {"is_subscribed": False, "daily_char_limit": 5000}
+        except Exception as e:
+            if attempt == 2:
+                raise e
+            time.sleep(0.3)
 
 import logging
 
@@ -693,8 +700,15 @@ class TranslationItem(BaseModel):
 class TranslationBatch(BaseModel):
     items: list[TranslationItem]
 
-def batch_translate(annotations: dict[str, dict], target_lang: str, source_text: str) -> dict[str, dict]:
-    doc_hash = hashlib.md5(source_text.encode()).hexdigest()
+def batch_translate(
+    annotations: dict[str, dict],
+    target_lang: str,
+    source_text: str = "",
+    doc_hash: str | None = None,
+    skip_source_check: bool = False
+) -> dict[str, dict]:
+    if doc_hash is None:
+        doc_hash = hashlib.md5(source_text.encode()).hexdigest()
     to_translate = []
     # Collect all top-level keys
     for key in annotations:
@@ -713,8 +727,9 @@ def batch_translate(annotations: dict[str, dict], target_lang: str, source_text:
             for i in range(0, len(to_translate), chunk_size):
                 chunk = to_translate[i:i + chunk_size]
                 try:
+                    context_section = f"\nSource text:\n{source_text}\n" if source_text else ""
                     prompt = f"""
-Translate the following English words/phrases into {target_lang} based on their context in the source text.
+Translate the following English words/phrases into {target_lang} based on their context.{context_section}
 Return ONLY valid JSON matching exactly this schema:
 {{
   "items": [
@@ -722,9 +737,6 @@ Return ONLY valid JSON matching exactly this schema:
     ...
   ]
 }}
-
-Source text:
-{source_text}
 
 Words/Phrases to translate:
 {json.dumps(chunk)}
@@ -782,9 +794,11 @@ Words/Phrases to translate:
                         for item in items:
                             key = item.get("span", "").lower()
                             # 锚定校验 1: 确保返回的短语是我们需要翻译的短语 (防漂移)
+                            # 注意: 校验 1 必须始终完全生效，确保模型返回的 key 严格属于当前批次请求的词，防止跨批次/自由发挥漂移。
                             if key in chunk:
                                 # 锚定校验 2: 确保该短语确实存在于源文中 (防模型编造幻觉)
-                                if key in source_text.lower():
+                                # 注意: skip_source_check 仅跳过校验 2 (EPUB 全书词表预先提取自原书，无局部字面包含限制，全书模式下不传单段全文)。
+                                if skip_source_check or (key in source_text.lower()):
                                     set_cached_translation(key, target_lang, doc_hash, item.get("translation", ""))
                                 else:
                                     print(f"Key '{key}' not in source text")
@@ -884,4 +898,57 @@ def annotate_endpoint(req: AnnotationRequest, user = Depends(get_current_user)):
             "chars_limit": limit
         }
     }
+
+
+@app.post("/epub/upload")
+async def upload_epub(
+    file: UploadFile = File(...),
+    difficulty_level: int = Form(900),
+    target_lang: str = Form("zh-Hans"),
+    user = Depends(get_current_user)
+):
+    """
+    Accepts an EPUB file, uploads to Storage, and creates a task.
+    Only available to subscribed users.
+    """
+    if not file.filename.lower().endswith('.epub'):
+        raise HTTPException(status_code=400, detail="只支持上传 EPUB 格式的文件")
+        
+    profile = get_user_profile(user.id)
+    if not profile.get("is_subscribed"):
+        raise HTTPException(
+            status_code=403, 
+            detail="EPUB 翻译生成是订阅专属功能，请升级订阅后再试。"
+        )
+
+    task_id = str(uuid.uuid4())
+    storage_path = f"{user.id}/{task_id}/{file.filename}"
+    
+    # Read and validate file content
+    content = await file.read()
+    import zipfile
+    import io
+    if not zipfile.is_zipfile(io.BytesIO(content)):
+        raise HTTPException(status_code=400, detail="文件不是有效的 EPUB 格式（无法作为 ZIP 归档读取）")
+    
+    try:
+        supabase.storage.from_("epubs").upload(storage_path, content)
+    except Exception as e:
+        if "Duplicate" in str(e):
+            supabase.storage.from_("epubs").update(storage_path, content)
+        else:
+            raise HTTPException(status_code=500, detail=f"文件上传失败: {e}")
+
+    # Create task
+    res = supabase.table("epub_tasks").insert({
+        "id": task_id,
+        "user_id": user.id,
+        "status": "pending",
+        "target_lang": target_lang,
+        "difficulty_level": difficulty_level,
+        "original_filename": file.filename,
+        "storage_input_path": storage_path
+    }).execute()
+
+    return {"task_id": task_id, "message": "任务已创建"}
 
