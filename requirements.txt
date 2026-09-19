@@ -6,3 +6,4 @@ google-genai
 pydantic
 pydantic-settings
 supabase
+lxml>=6.1.0

@@ -110,3 +110,93 @@ GRANT ALL ON public.user_profiles TO service_role;
 GRANT ALL ON public.daily_usage TO service_role;
 GRANT SELECT ON public.user_profiles TO authenticated, anon;
 GRANT SELECT ON public.daily_usage TO authenticated, anon;
+
+-- ─── 6. EPUB 任务表 (Track 3: 异步任务处理管道) ───────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.epub_tasks (
+  -- 1. 任务标识与归属
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+
+  -- 2. 状态机与多维进度
+  status                TEXT NOT NULL DEFAULT 'pending',
+                        -- 枚举: 'pending', 'scanning', 'translating', 'generating', 'completed', 'failed'
+  progress_percent      INTEGER NOT NULL DEFAULT 0,
+  current_step_desc     TEXT DEFAULT '排队等待处理...',
+  total_chapters        INTEGER DEFAULT 0,
+  current_chapter       INTEGER DEFAULT 0,
+  total_unique_words    INTEGER DEFAULT 0,
+  translated_words      INTEGER DEFAULT 0,
+
+  -- 3. 固化生成配置 (生成前选定)
+  target_lang           TEXT NOT NULL DEFAULT 'zh-Hans',
+  difficulty_level      INTEGER NOT NULL DEFAULT 900,
+  original_filename     TEXT NOT NULL,
+
+  -- 4. 存储路径 (Supabase Storage: 私有 Bucket)
+  storage_input_path    TEXT NOT NULL,
+  storage_output_path   TEXT,
+  download_url          TEXT,
+
+  -- 5. 容错与审计 (面向用户友好信息与面向内部排查堆栈分离)
+  error_message         TEXT,
+  error_detail          TEXT,
+  failed_words_count    INTEGER DEFAULT 0,
+  failed_words          JSONB DEFAULT '[]'::jsonb,
+
+  -- 6. 时间戳与 Worker 审计
+  worker_id             TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at            TIMESTAMPTZ,
+  completed_at          TIMESTAMPTZ,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_epub_tasks_user_id ON public.epub_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_epub_tasks_status_created ON public.epub_tasks(status, created_at);
+
+ALTER TABLE public.epub_tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "epub_tasks_select_own"
+  ON public.epub_tasks
+  FOR SELECT
+  TO authenticated, anon
+  USING (auth.uid() = user_id);
+
+GRANT ALL ON public.epub_tasks TO service_role;
+GRANT SELECT ON public.epub_tasks TO authenticated, anon;
+
+-- ─── 7. 原子领取 EPUB 任务 RPC ────────────────────────────────────────────────
+-- 用于 Worker 安全领取排队的任务，防止多个 Worker 重复领取。
+-- 内部使用 FOR UPDATE SKIP LOCKED 实现。
+
+CREATE OR REPLACE FUNCTION public.claim_epub_task(
+  p_worker_id TEXT
+) RETURNS SETOF public.epub_tasks AS $$
+DECLARE
+  v_task_id UUID;
+BEGIN
+  -- 1. 查找最老的一个待处理任务并锁定它
+  SELECT id INTO v_task_id
+  FROM public.epub_tasks
+  WHERE status = 'pending'
+  ORDER BY created_at ASC
+  FOR UPDATE SKIP LOCKED
+  LIMIT 1;
+
+  -- 2. 如果找到了，更新状态并返回完整行
+  IF v_task_id IS NOT NULL THEN
+    RETURN QUERY
+    UPDATE public.epub_tasks
+    SET status = 'scanning',
+        worker_id = p_worker_id,
+        started_at = now(),
+        updated_at = now(),
+        current_step_desc = '开始处理任务...'
+    WHERE id = v_task_id
+    RETURNING *;
+  END IF;
+  
+  RETURN;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

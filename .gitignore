@@ -8,3 +8,6 @@ venv/
 .env.*
 .env.local
 !.env.example
+*.epub
+test_extract/
+test_not_epub.txt

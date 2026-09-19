@@ -21,8 +21,8 @@ python -m spacy download en_core_web_sm
 The application relies on the Gemini API to fetch contextual translations:
 ```bash
 export GEMINI_API_KEY="your-api-key-here"
-# Optional (default is gemini-2.5-flash-lite)
-export GEMINI_MODEL="gemini-2.5-flash-lite"
+# Optional (default is gemini-3.5-flash-lite)
+export GEMINI_MODEL="gemini-3.5-flash-lite"
 ```
 
 ## Running the Application
