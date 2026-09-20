@@ -9,7 +9,7 @@ Architecture:
   - API returns FULL dictionary regardless of threshold; frontend handles filtering.
 """
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Request, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -20,6 +20,8 @@ import re
 import spacy
 import json
 import hashlib
+import hmac
+from typing import Optional, Dict, Any
 import sqlite3
 import os
 import sys
@@ -48,6 +50,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"
+    lemonsqueezy_webhook_secret: str = ""
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -951,4 +954,191 @@ async def upload_epub(
     }).execute()
 
     return {"task_id": task_id, "message": "任务已创建"}
+
+
+def resolve_subscription_status(event_name: str, attrs: dict) -> Optional[bool]:
+    """
+    根据 LemonSqueezy 事件类型解析目标 is_subscribed 状态。
+    遵循标准 SaaS 宽限期策略（非立即熔断）：
+    - 用户取消或扣款重试期，保留权限至账单周期结束；
+    - 最终以 expired 或 updated 状态变更作为权限收回判定。
+    """
+    if event_name in (
+        "subscription_created",
+        "subscription_resumed",
+        "subscription_unpaused",
+        "subscription_payment_recovered",
+        "subscription_payment_success",
+    ):
+        return True
+
+    # 宽限期策略：用户主动取消续费或扣款暂时失败进入 dunning 时，
+    # 用户已付费的周期尚未结束，暂不收回权限（返回 None，仅推进时间戳与记录日志）
+    if event_name in ("subscription_cancelled", "subscription_payment_failed"):
+        return None
+
+    # 彻底失效终止事件（宽限期结束）：立即收回权限
+    if event_name in ("subscription_expired", "subscription_paused"):
+        return False
+
+    # 通用状态变更事件：依据 LemonSqueezy 真实属性判定
+    if event_name == "subscription_updated":
+        sub_status = attrs.get("status")
+        if sub_status in ("active", "on_trial"):
+            return True
+        elif sub_status in ("expired", "unpaid", "paused"):
+            return False
+
+    return None
+
+
+@app.post("/webhook/lemonsqueezy")
+async def lemonsqueezy_webhook(
+    request: Request,
+    x_signature: Optional[str] = Header(None, alias="X-Signature")
+):
+    """
+    LemonSqueezy Webhook 回调端点：
+    1. 校验 HMAC-SHA256 签名 (X-Signature)；
+    2. 基于 event_id 与 updated_at 进行幂等与时序乱序保护；
+    3. 按照宽限期规则推进 user_profiles.is_subscribed 与 subscription_updated_at；
+    4. 记录 webhook_logs 审计流水。
+    """
+    if not settings.lemonsqueezy_webhook_secret:
+        logger.error("[Security] LEMONSQUEEZY_WEBHOOK_SECRET not configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Webhook secret not configured"
+        )
+
+    if not x_signature:
+        logger.warning("[Security] Missing X-Signature header in webhook request")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing X-Signature header"
+        )
+
+    raw_bytes = await request.body()
+    calculated_sig = hmac.new(
+        settings.lemonsqueezy_webhook_secret.encode("utf-8"),
+        raw_bytes,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(calculated_sig, x_signature):
+        logger.warning("[Security] Webhook signature verification failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid signature"
+        )
+
+    try:
+        payload = json.loads(raw_bytes.decode("utf-8"))
+    except Exception as e:
+        logger.warning(f"[Webhook] Malformed JSON payload: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed JSON")
+
+    meta = payload.get("meta") or {}
+    event_name = meta.get("event_name")
+    if not event_name:
+        return {"status": "ignored", "reason": "no_event_name"}
+
+    custom_data = meta.get("custom_data") or {}
+    user_id = custom_data.get("user_id")
+    if not user_id:
+        # 非关联用户（例如管理员测试未绑定 custom_data.user_id），安全忽略
+        return {"status": "ignored", "reason": "no_user_id"}
+
+    data_obj = payload.get("data") or {}
+    attrs = data_obj.get("attributes") or {}
+
+    # 确定性复合 event_id 与时间戳
+    event_time_str = attrs.get("updated_at") or attrs.get("created_at") or ""
+    event_id = (
+        meta.get("event_id")
+        or f"{event_name}_{data_obj.get('type', '')}_{data_obj.get('id', '')}_{event_time_str}"
+    )
+
+    try:
+        event_dt = datetime.fromisoformat(event_time_str.replace("Z", "+00:00"))
+    except Exception:
+        event_dt = datetime.now(timezone.utc)
+
+    # 读取当前用户在 user_profiles 表中的状态与记录的时间戳
+    try:
+        prof_res = supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
+        current_profile = prof_res.data[0] if prof_res.data else None
+    except Exception as e:
+        logger.error(f"[Webhook] Database read error for user {user_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database read error")
+
+    if not current_profile:
+        logger.warning(f"[Webhook] User profile not found for user_id {user_id}")
+        return {"status": "ignored", "reason": "user_not_found"}
+
+    current_sub_updated_at_str = current_profile.get("subscription_updated_at")
+    current_dt = None
+    if current_sub_updated_at_str:
+        try:
+            current_dt = datetime.fromisoformat(current_sub_updated_at_str.replace("Z", "+00:00"))
+        except Exception:
+            current_dt = None
+
+    # 时序校验分支（NULL 初始状态或单调递增）
+    is_newer_event = (current_dt is None) or (event_dt >= current_dt)
+    if not is_newer_event:
+        logger.info(f"[Webhook] Ignored stale event {event_name} for user {user_id} (event_dt={event_dt} < current_dt={current_dt})")
+        try:
+            supabase.table("webhook_logs").insert({
+                "event_id": event_id,
+                "event_name": event_name,
+                "user_id": user_id,
+                "event_updated_at": event_dt.isoformat(),
+                "status": "ignored_stale"
+            }).execute()
+        except Exception as log_err:
+            logger.warning(f"[Webhook] Could not insert stale webhook_log: {log_err}")
+        return {"status": "ignored", "reason": "stale_event"}
+
+    # 提取 subscription_id 与 customer_id
+    sub_id = (
+        str(data_obj.get("id"))
+        if data_obj.get("type") == "subscriptions"
+        else str(attrs.get("subscription_id") or "")
+    )
+    cust_id = str(attrs.get("customer_id") or "")
+
+    # 业务状态流转与推进时间戳
+    new_is_subscribed = resolve_subscription_status(event_name, attrs)
+
+    update_payload = {
+        "subscription_updated_at": event_dt.isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    if sub_id:
+        update_payload["subscription_id"] = sub_id
+    if cust_id:
+        update_payload["customer_id"] = cust_id
+    if new_is_subscribed is not None:
+        update_payload["is_subscribed"] = new_is_subscribed
+
+    try:
+        supabase.table("user_profiles").update(update_payload).eq("user_id", user_id).execute()
+    except Exception as e:
+        logger.error(f"[Webhook] Database update error for user {user_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database update error")
+
+    # 记录成功的 webhook_logs 审计流水
+    try:
+        supabase.table("webhook_logs").insert({
+            "event_id": event_id,
+            "event_name": event_name,
+            "user_id": user_id,
+            "event_updated_at": event_dt.isoformat(),
+            "status": "processed"
+        }).execute()
+    except Exception as log_err:
+        logger.warning(f"[Webhook] Could not insert webhook_log: {log_err}")
+
+    return {"status": "ok", "event_id": event_id}
 

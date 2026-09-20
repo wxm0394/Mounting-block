@@ -200,3 +200,34 @@ BEGIN
   RETURN;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ─── 8. Track 4: 支付订阅状态表与防乱序时间戳 ─────────────────────────────────
+
+-- 1. 为 user_profiles 扩展订阅事件时序对比字段与外部关联 ID (初始为 NULL)
+ALTER TABLE public.user_profiles 
+  ADD COLUMN IF NOT EXISTS subscription_updated_at TIMESTAMPTZ DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS subscription_id         TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS customer_id             TEXT DEFAULT NULL;
+
+-- 2. 创建 Webhook 处理流水审计表
+CREATE TABLE IF NOT EXISTS public.webhook_logs (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id              TEXT UNIQUE,                -- LemonSqueezy 事件唯一标识或复合键 (用于幂等去重)
+  event_name            TEXT NOT NULL,              -- 事件名称 (如 subscription_created)
+  user_id               UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  event_updated_at      TIMESTAMPTZ NOT NULL,       -- LemonSqueezy payload 中的 data.attributes.updated_at
+  status                TEXT NOT NULL DEFAULT 'processed', -- 'processed' | 'ignored_stale' | 'error'
+  processed_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_user_id ON public.webhook_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_event_id ON public.webhook_logs(event_id);
+
+-- 3. 启用严格行级安全 (RLS)
+ALTER TABLE public.webhook_logs ENABLE ROW LEVEL SECURITY;
+
+-- 4. 权限隔离：不为 authenticated 或 anon 创建任何 Policy，仅授权 service_role 完全访问
+REVOKE ALL ON public.webhook_logs FROM PUBLIC;
+REVOKE ALL ON public.webhook_logs FROM anon, authenticated;
+GRANT ALL ON public.webhook_logs TO service_role;
+
