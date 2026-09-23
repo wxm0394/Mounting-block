@@ -141,7 +141,7 @@ function App() {
   useEffect(() => {
     if (!epubTaskId || epubTaskStatus === 'completed' || epubTaskStatus === 'failed') return;
     const interval = setInterval(async () => {
-      const { data, error } = await supabase.from('epub_tasks').select('*').eq('id', epubTaskId).single();
+      const { data } = await supabase.from('epub_tasks').select('*').eq('id', epubTaskId).single();
       if (data) {
         setEpubTaskStatus(data.status);
         setEpubTaskProgress(data.progress_percent);
