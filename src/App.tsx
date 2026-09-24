@@ -92,7 +92,7 @@ function App() {
       setIsAnalyzing(true);
       setError(null);
       try {
-        const response = await fetch('http://localhost:8000/annotate', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/annotate`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -175,7 +175,7 @@ function App() {
     formData.append('target_lang', 'zh-Hans');
     
     try {
-      const response = await fetch('http://localhost:8000/epub/upload', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/epub/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session?.access_token}`
