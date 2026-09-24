@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_model: str = "gemini-1.5-flash"
     lemonsqueezy_webhook_secret: str = ""
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
