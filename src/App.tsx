@@ -92,7 +92,7 @@ function App() {
       setIsAnalyzing(true);
       setError(null);
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.levelnread.com'}/annotate`, {
+        const response = await fetch(`https://api.levelnread.com/annotate`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -175,7 +175,7 @@ function App() {
     formData.append('target_lang', 'zh-Hans');
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.levelnread.com'}/epub/upload`, {
+      const response = await fetch(`https://api.levelnread.com/epub/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session?.access_token}`
