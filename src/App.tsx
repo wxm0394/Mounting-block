@@ -55,6 +55,9 @@ function App() {
   const [epubTaskDesc, setEpubTaskDesc] = useState('');
   const [epubTaskError, setEpubTaskError] = useState<string | null>(null);
   const [epubDownloadUrl, setEpubDownloadUrl] = useState<string | null>(null);
+  const [isUploadingEpub, setIsUploadingEpub] = useState(false);
+  const [uploadSuccessNotice, setUploadSuccessNotice] = useState<string | null>(null);
+  const [uploadModalError, setUploadModalError] = useState<string | null>(null);
   
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -161,13 +164,11 @@ function App() {
   }, [epubTaskId, epubTaskStatus]);
 
   const handleUploadEpub = async () => {
-    if (!selectedFile) return;
-    setShowEpubModal(false);
+    if (!selectedFile || isUploadingEpub) return;
+    setIsUploadingEpub(true);
+    setUploadModalError(null);
     setError(null);
-    setEpubTaskId(null);
-    setEpubTaskStatus(null);
-    setEpubTaskError(null);
-    setEpubDownloadUrl(null);
+    setUploadSuccessNotice(null);
     
     const formData = new FormData();
     formData.append('file', selectedFile);
@@ -184,18 +185,36 @@ function App() {
       });
       if (response.ok) {
         const data = await response.json();
+        // 成功创建任务：关闭弹窗，重置任务状态，并显示明显的即时成功确认
+        setShowEpubModal(false);
+        setIsUploadingEpub(false);
         setEpubTaskId(data.task_id);
         setEpubTaskStatus('pending');
-        setEpubTaskDesc('任务已提交，排队中...');
-      } else if (response.status === 403) {
-        const errData = await response.json();
-        setError(errData.detail);
+        setEpubTaskProgress(0);
+        setEpubTaskDesc('任务已提交，排队等待处理...');
+        setEpubTaskError(null);
+        setEpubDownloadUrl(null);
+        setUploadSuccessNotice('🎉 文件已上传成功！任务已创建，开始排队处理。');
+        setTimeout(() => {
+          setUploadSuccessNotice(null);
+        }, 6000);
       } else {
-        const errData = await response.json();
-        setError(errData.detail || '上传失败');
+        setIsUploadingEpub(false);
+        let detail = '上传失败';
+        try {
+          const errData = await response.json();
+          detail = errData.detail || detail;
+        } catch {
+          detail = `上传请求失败 (HTTP ${response.status})`;
+        }
+        setUploadModalError(detail);
+        setError(`EPUB 上传失败: ${detail}`);
       }
-    } catch (err) {
-      setError("连接后端失败");
+    } catch (err: any) {
+      setIsUploadingEpub(false);
+      const msg = err?.message || '网络连接失败，请检查网络连接或服务器状态';
+      setUploadModalError(msg);
+      setError(`EPUB 上传异常: ${msg}`);
     }
   };
 
@@ -335,6 +354,16 @@ function App() {
             </>
           )}
 
+          {mode === 'epub' && uploadSuccessNotice && (
+            <div style={{ background: '#052e16', border: '1px solid #14532d', color: '#86efac', padding: '14px 18px', borderRadius: '10px', marginTop: '12px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
+              <span style={{ fontSize: '20px' }}>🚀</span>
+              <div>
+                <strong style={{ display: 'block', fontSize: '14px', color: '#4ade80' }}>上传成功，任务已创建！</strong>
+                <span style={{ fontSize: '13px', color: '#bbf7d0' }}>文件已送达服务器并加入处理队列，下方进度卡片将实时更新。</span>
+              </div>
+            </div>
+          )}
+
           {mode === 'epub' && epubTaskId && (
              <div style={{ background: '#18181b', padding: '24px', borderRadius: '12px', border: '1px solid #3f3f46', marginTop: '10px' }}>
                <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#e4e4e7' }}>EPUB Translation Status</h3>
@@ -368,19 +397,77 @@ function App() {
       {/* EPUB Config Modal */}
       {showEpubModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: '#18181b', padding: '32px', borderRadius: '16px', width: '400px', border: '1px solid #3f3f46', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+          <div style={{ background: '#18181b', padding: '32px', borderRadius: '16px', width: '420px', border: '1px solid #3f3f46', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
             <h2 style={{ marginTop: 0, color: '#e4e4e7', fontSize: '1.2rem' }}>Configure EPUB Translation</h2>
-            <div className="level-control" style={{ marginBottom: '32px', marginTop: '24px' }}>
+            
+            {uploadModalError && (
+              <div style={{ marginBottom: '16px', color: '#fca5a5', fontSize: '13px', background: '#450a0a', padding: '10px', borderRadius: '6px', border: '1px solid #7f1d1d' }}>
+                ⚠️ {uploadModalError}
+              </div>
+            )}
+
+            <div className="level-control" style={{ marginBottom: '32px', marginTop: '20px' }}>
               <div className="level-header">
                 <label>Your Reading Level:</label>
                 <span className="level-value">{displayLevel}</span>
               </div>
-              <input type="range" min="500" max="1500" step="50" value={displayLevel} onChange={(e) => setDisplayLevel(Number(e.target.value))} className="level-slider" />
+              <input 
+                type="range" 
+                min="500" 
+                max="1500" 
+                step="50" 
+                value={displayLevel} 
+                onChange={(e) => setDisplayLevel(Number(e.target.value))} 
+                className="level-slider" 
+                disabled={isUploadingEpub} 
+              />
               <div className="level-labels"><span>Beginner</span><span>Intermediate</span><span>Advanced</span></div>
             </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button onClick={() => setShowEpubModal(false)} style={{ padding: '10px 20px', background: 'transparent', border: '1px solid #3f3f46', color: '#e4e4e7', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}>Cancel</button>
-              <button onClick={handleUploadEpub} style={{ padding: '10px 20px', background: '#3b82f6', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Confirm & Translate</button>
+              <button 
+                disabled={isUploadingEpub}
+                onClick={() => {
+                  if (!isUploadingEpub) {
+                    setShowEpubModal(false);
+                    setUploadModalError(null);
+                  }
+                }} 
+                style={{ 
+                  padding: '10px 20px', 
+                  background: 'transparent', 
+                  border: '1px solid #3f3f46', 
+                  color: isUploadingEpub ? '#52525b' : '#e4e4e7', 
+                  borderRadius: '6px', 
+                  cursor: isUploadingEpub ? 'not-allowed' : 'pointer', 
+                  fontWeight: 500 
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUploadEpub} 
+                disabled={isUploadingEpub} 
+                style={{ 
+                  padding: '10px 20px', 
+                  background: isUploadingEpub ? '#1d4ed8' : '#3b82f6', 
+                  border: 'none', 
+                  color: isUploadingEpub ? '#93c5fd' : 'white', 
+                  borderRadius: '6px', 
+                  cursor: isUploadingEpub ? 'not-allowed' : 'pointer', 
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                {isUploadingEpub && (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width: '16px', height: '16px', animation: 'spin 1s linear infinite'}}>
+                    <line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                  </svg>
+                )}
+                {isUploadingEpub ? '正在上传…' : 'Confirm & Translate'}
+              </button>
             </div>
           </div>
         </div>
@@ -393,13 +480,20 @@ function App() {
 function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<'login' | 'signup' | false>(false);
   const [message, setMessage] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const isEmailValid = email === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isPasswordValid = password === '' || password.length >= 6;
+  const isFormValid = email !== '' && password !== '' && isEmailValid && isPasswordValid;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!isFormValid) return;
+    setLoading('login');
     setMessage('');
+    setSuccessMsg('');
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setMessage(error.message);
     setLoading(false);
@@ -407,11 +501,16 @@ function AuthScreen() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!isFormValid) return;
+    setLoading('signup');
     setMessage('');
+    setSuccessMsg('');
     const { error } = await supabase.auth.signUp({ email, password });
-    if (error) setMessage(error.message);
-    else setMessage('Sign up successful! You can now log in.');
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setSuccessMsg('注册成功！请查收邮箱完成验证后再登录');
+    }
     setLoading(false);
   };
 
@@ -419,13 +518,73 @@ function AuthScreen() {
     <div className="auth-container" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#09090b', color: '#e4e4e7'}}>
       <div style={{background: '#18181b', padding: '40px', borderRadius: '12px', width: '340px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)'}}>
         <h1 style={{marginTop: 0, marginBottom: '24px', fontSize: '24px', textAlign: 'center'}}>Sign in to ReadLevel</h1>
-        {message && <div style={{marginBottom: '16px', color: '#fca5a5', fontSize: '14px', background: '#450a0a', padding: '8px', borderRadius: '6px'}}>{message}</div>}
+        {message && <div style={{marginBottom: '16px', color: '#fca5a5', fontSize: '14px', background: '#450a0a', padding: '10px', borderRadius: '6px', border: '1px solid #7f1d1d'}}>⚠️ {message}</div>}
+        {successMsg && <div style={{marginBottom: '16px', color: '#86efac', fontSize: '14px', background: '#052e16', padding: '10px', borderRadius: '6px', border: '1px solid #14532d'}}>✅ {successMsg}</div>}
+        
         <form style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{padding: '10px', borderRadius: '6px', border: '1px solid #3f3f46', background: '#27272a', color: 'white'}} />
-          <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{padding: '10px', borderRadius: '6px', border: '1px solid #3f3f46', background: '#27272a', color: 'white'}} />
+          <div>
+            <input 
+              type="email" 
+              placeholder="Email" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              style={{
+                padding: '10px', borderRadius: '6px', border: `1px solid ${isEmailValid ? '#3f3f46' : '#ef4444'}`, 
+                background: '#27272a', color: 'white', width: '100%', boxSizing: 'border-box', outline: 'none'
+              }} 
+            />
+            {!isEmailValid && <div style={{color: '#f87171', fontSize: '12px', marginTop: '4px'}}>请输入有效的邮箱地址</div>}
+          </div>
+          
+          <div>
+            <input 
+              type="password" 
+              placeholder="Password" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              style={{
+                padding: '10px', borderRadius: '6px', border: `1px solid ${isPasswordValid ? '#3f3f46' : '#ef4444'}`, 
+                background: '#27272a', color: 'white', width: '100%', boxSizing: 'border-box', outline: 'none'
+              }} 
+            />
+            {!isPasswordValid && <div style={{color: '#f87171', fontSize: '12px', marginTop: '4px'}}>密码至少需要 6 个字符</div>}
+          </div>
+
           <div style={{display: 'flex', gap: '12px', marginTop: '8px'}}>
-            <button type="button" onClick={handleLogin} disabled={loading} style={{flex: 1, padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600}}>Sign In</button>
-            <button type="button" onClick={handleSignUp} disabled={loading} style={{flex: 1, padding: '10px', background: '#27272a', color: 'white', border: '1px solid #3f3f46', borderRadius: '6px', cursor: 'pointer', fontWeight: 600}}>Sign Up</button>
+            <button 
+              type="button" 
+              onClick={handleLogin} 
+              disabled={!!loading || !isFormValid} 
+              style={{
+                flex: 1, padding: '10px', background: (!isFormValid || loading) ? '#1d4ed8' : '#3b82f6', 
+                color: (!isFormValid || loading) ? '#93c5fd' : 'white', border: 'none', borderRadius: '6px', 
+                cursor: (!isFormValid || loading) ? 'not-allowed' : 'pointer', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
+              }}
+            >
+              {loading === 'login' && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width: '16px', height: '16px', animation: 'spin 1s linear infinite'}}>
+                  <line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                </svg>
+              )}
+              Sign In
+            </button>
+            <button 
+              type="button" 
+              onClick={handleSignUp} 
+              disabled={!!loading || !isFormValid} 
+              style={{
+                flex: 1, padding: '10px', background: '#27272a', 
+                color: (!isFormValid || loading) ? '#52525b' : 'white', border: '1px solid #3f3f46', borderRadius: '6px', 
+                cursor: (!isFormValid || loading) ? 'not-allowed' : 'pointer', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
+              }}
+            >
+              {loading === 'signup' && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width: '16px', height: '16px', animation: 'spin 1s linear infinite'}}>
+                  <line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+                </svg>
+              )}
+              Sign Up
+            </button>
           </div>
         </form>
       </div>

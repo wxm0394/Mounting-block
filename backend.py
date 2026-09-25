@@ -888,7 +888,7 @@ def annotate_endpoint(req: AnnotationRequest, user = Depends(get_current_user)):
         chars_used = result
     else:
         chars_used = 0 # Subscribed users don't consume chars_used
-        limit = profile.get("daily_char_limit", 50000) # Use actual limit instead of string
+        limit = profile.get("daily_char_limit", 80000) # Use actual limit instead of string
 
     annotations = analyze_text(req.text)
     adjusted = apply_target_lang_adjustments(annotations, req.target_lang)

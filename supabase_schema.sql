@@ -17,8 +17,8 @@ CREATE TABLE public.user_profiles (
 );
 
 -- 注意：daily_char_limit 列实际不存在于线上数据库。
--- 当前免费/订阅两档限额（5000/50000 字符）由 backend.py 中
--- profile.get("daily_char_limit", 5000/50000) 硬编码兜底。
+-- 当前免费/订阅两档限额（5000/80000 字符）由 backend.py 中
+-- profile.get("daily_char_limit", 5000/80000) 硬编码兜底。
 -- reading_level 和 subscription_expires_at 是历史遗留列，
 -- 暂未接入任何业务逻辑。
 
