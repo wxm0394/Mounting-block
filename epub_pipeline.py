@@ -12,11 +12,15 @@ import zipfile
 import os
 import re
 import gc
+from collections import Counter
 import hashlib
 from xml.sax.saxutils import escape
 import lxml.etree as ET
 
 import backend
+
+# ── Hard cap on candidate vocabulary to bound Gemini API usage ────────
+MAX_CANDIDATES = 8000
 
 # ── Inline CSS injected into each modified chapter's <head> ─────────────────
 READLEVEL_INLINE_CSS = """
@@ -316,9 +320,10 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
     """
     Pass 1: Stream-reads each chapter, extracts visible text paragraphs,
     runs analyze_text, and collects all candidate words/phrases >= difficulty_threshold.
-    Returns global candidate_meta dictionary.
+    Returns global candidate_meta dictionary, truncated to MAX_CANDIDATES by frequency.
     """
     candidate_meta: dict[str, dict] = {}
+    candidate_freq: Counter = Counter()  # 统计每个 key 在全书中出现的段落次数
 
     for chapter_path in chapter_paths:
         try:
@@ -360,6 +365,7 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
                             max_sw_level = sw_level
 
                     if raw_level >= difficulty_threshold or max_sw_level >= difficulty_threshold:
+                        candidate_freq[key] += 1
                         if key not in candidate_meta:
                             candidate_meta[key] = meta
 
@@ -368,6 +374,16 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
         except Exception as e:
             print(f"Warning: Pass 1 failed to scan chapter {chapter_path}: {e}")
             continue
+
+    # ── 全书扫描完毕后，按出现频率排序截断至 MAX_CANDIDATES ──
+    pre_truncate_count = len(candidate_meta)
+    if pre_truncate_count > MAX_CANDIDATES:
+        # 取出现频率最高的 MAX_CANDIDATES 个词
+        top_keys = {k for k, _ in candidate_freq.most_common(MAX_CANDIDATES)}
+        candidate_meta = {k: v for k, v in candidate_meta.items() if k in top_keys}
+        print(f"[TRUNCATE] Candidate vocabulary truncated from {pre_truncate_count} to {len(candidate_meta)} (limit={MAX_CANDIDATES})")
+    else:
+        print(f"[PASS1] Candidate vocabulary size: {pre_truncate_count} (within limit={MAX_CANDIDATES})")
 
     gc.collect()
     return candidate_meta

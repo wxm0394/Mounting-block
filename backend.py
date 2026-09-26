@@ -703,6 +703,11 @@ class TranslationItem(BaseModel):
 class TranslationBatch(BaseModel):
     items: list[TranslationItem]
 
+class GeminiQuotaExhaustedError(Exception):
+    """Raised when Gemini API returns RESOURCE_EXHAUSTED / daily quota exceeded.
+    Signals callers to fast-fail instead of retrying."""
+    pass
+
 def batch_translate(
     annotations: dict[str, dict],
     target_lang: str,
@@ -727,8 +732,11 @@ def batch_translate(
         try:
             client = genai.Client(api_key=settings.gemini_api_key or os.environ.get("GEMINI_API_KEY"))
             chunk_size = 50
+            total_batches = (len(to_translate) + chunk_size - 1) // chunk_size
             for i in range(0, len(to_translate), chunk_size):
                 chunk = to_translate[i:i + chunk_size]
+                batch_num = i // chunk_size
+                print(f"[TRANSLATE] Processing batch {batch_num + 1}/{total_batches} ({len(chunk)} words)...")
                 try:
                     context_section = f"\nSource text:\n{source_text}\n" if source_text else ""
                     prompt = f"""
@@ -758,11 +766,28 @@ Words/Phrases to translate:
                             )
                             break # Success!
                         except Exception as e:
-                            print(f"Gemini translation batch {i//chunk_size} attempt {attempt+1} failed: {e}")
+                            err_str = str(e).lower()
+                            # ── 区分"配额耗尽"与"临时限流" ──
+                            is_quota_exhausted = (
+                                "resource_exhausted" in err_str
+                                or "quota" in err_str
+                                or "daily limit" in err_str
+                                or "rate limit" in err_str and "per day" in err_str
+                            )
+                            if is_quota_exhausted:
+                                print(f"[FATAL] Gemini API quota exhausted at batch {batch_num + 1}/{total_batches}: {e}")
+                                print(f"[FATAL] Aborting all remaining translation batches. {len(to_translate) - i - len(chunk)} words left untranslated.")
+                                raise GeminiQuotaExhaustedError(str(e)) from e
+
+                            # Temporary 429 or transient error → retry with backoff
+                            print(f"Gemini translation batch {batch_num} attempt {attempt+1} failed (transient): {e}")
                             if attempt < 2:
-                                time.sleep(2 ** attempt) # Exponential backoff: 1s, 2s
+                                backoff = 2 ** (attempt + 1)  # 2s, 4s
+                                print(f"  Retrying in {backoff}s...")
+                                time.sleep(backoff)
                             else:
-                                raise e # Re-raise if all attempts fail
+                                print(f"  All 3 attempts exhausted for batch {batch_num}, skipping this batch.")
+                                break  # Don't raise — skip this batch and continue with next
                     
                     if response and response.text:
                         try:
@@ -807,12 +832,17 @@ Words/Phrases to translate:
                                     print(f"Key '{key}' not in source text")
                             else:
                                 print(f"Key '{key}' not in chunk")
+                except GeminiQuotaExhaustedError:
+                    raise  # Propagate immediately — no point continuing
                 except Exception as e:
-                    print(f"Gemini translation batch {i//chunk_size} failed: {e}")
+                    print(f"Gemini translation batch {batch_num} failed: {e}")
                 
                 # Sleep to prevent rate limiting
                 import time
                 time.sleep(2)
+        except GeminiQuotaExhaustedError:
+            print(f"[FATAL] Quota exhausted — aborting batch_translate. Partial translations saved to cache.")
+            raise  # Let epub_worker catch this and mark task as failed
         except Exception as e:
             print(f"Gemini translation failed to initialize or execute: {e}")
 

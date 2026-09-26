@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from supabase import create_client, Client
 import epub_pipeline
+from backend import GeminiQuotaExhaustedError
 
 class Settings(BaseSettings):
     supabase_url: str
@@ -103,6 +104,16 @@ def process_task(task: dict):
             }).eq("id", task_id).execute()
             
             print(f"--- Task {task_id} Completed Successfully ---")
+            
+        except GeminiQuotaExhaustedError as e:
+            print(f"--- Task {task_id} Failed: Gemini API Quota Exhausted ---")
+            supabase.table("epub_tasks").update({
+                "status": "failed",
+                "current_step_desc": "API 配额耗尽，任务终止",
+                "error_message": "Gemini API 每日配额已用完，无法继续翻译。请稍后重试或确认 API Key 计费已开通。",
+                "error_detail": str(e),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", task_id).execute()
             
         except Exception as e:
             traceback_str = traceback.format_exc()
