@@ -1351,3 +1351,4 @@ body {
 .reader-container[data-threshold="1500"] .annotation-unit[data-phrase-level="1500"] .words-view {
   display: none;
 }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }

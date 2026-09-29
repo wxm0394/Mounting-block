@@ -5,6 +5,11 @@ import { annotateText, MOCK_DICTIONARY } from './lib/annotator';
 
 import './index.css';
 
+const API_URL = import.meta.env.VITE_API_URL;
+if (!API_URL) {
+  throw new Error("Missing VITE_API_URL environment variable");
+}
+
 function paginateText(text: string, charsPerPage = 1200): string[] {
   const paragraphs = text.split(/\n+/).filter(p => p.trim().length > 0);
   const pages: string[] = [];
@@ -95,7 +100,7 @@ function App() {
       setIsAnalyzing(true);
       setError(null);
       try {
-        const response = await fetch(`https://api.levelnread.com/annotate`, {
+        const response = await fetch(`${API_URL}/annotate`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -176,7 +181,7 @@ function App() {
     formData.append('target_lang', 'zh-Hans');
     
     try {
-      const response = await fetch(`https://api.levelnread.com/epub/upload`, {
+      const response = await fetch(`${API_URL}/epub/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session?.access_token}`
