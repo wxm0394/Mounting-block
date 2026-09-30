@@ -344,7 +344,7 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
             )
             for p in paragraphs:
                 p_text = "".join(p.itertext()).strip()
-                if not p_text or len(p_text) < 3:
+                if not p_text or len(p_text) < 10:
                     continue
                 valid_paragraphs_count += 1
 
@@ -514,6 +514,9 @@ def process_epub_file(input_epub_path: str, output_epub_path: str,
         if progress_callback:
             progress_callback(15, f"正在扫描全书章节并提取难词 (共 {len(chapter_paths)} 章)...")
         candidate_meta, valid_paragraphs_count = run_pass1_scan_vocabulary(zip_in, chapter_paths, difficulty_level)
+        
+        if valid_paragraphs_count == 0:
+            raise ValueError("未能从文件中提取到有效正文段落，可能是由于该 EPUB 使用了不规范的排版标签。")
 
         # 4. Phase 1.5: Batch Translate
         print(f"[DEBUG] candidate_meta size: {len(candidate_meta)}")
