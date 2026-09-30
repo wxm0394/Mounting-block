@@ -79,6 +79,9 @@ def process_task(task: dict):
                 progress_callback=progress_cb
             )
             
+            if stats.get("valid_paragraphs_count", 0) == 0:
+                raise ValueError("未能从文件中提取到有效正文段落，可能是由于该 EPUB 使用了不规范的排版标签。")
+                
             # 3. Upload Result
             update_task_progress(task_id, 95, "正在上传标注后的 EPUB 文件...")
             upload_file(local_out, output_storage_path)
@@ -90,10 +93,14 @@ def process_task(task: dict):
             download_url = signed_url_res.get("signedURL") or signed_url_res.get("signedUrl", "")
             
             # 4. Mark as Completed
+            step_desc = "任务完成！"
+            if stats["total_unique_words"] == 0 or stats["annotated_count"] == 0:
+                step_desc = "本书生词均低于您的难度门槛，任务完成！"
+                
             supabase.table("epub_tasks").update({
                 "status": "completed",
                 "progress_percent": 100,
-                "current_step_desc": "任务完成！",
+                "current_step_desc": step_desc,
                 "storage_output_path": output_storage_path,
                 "download_url": download_url,
                 "total_chapters": stats["total_chapters"],

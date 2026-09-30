@@ -708,6 +708,25 @@ class GeminiQuotaExhaustedError(Exception):
     Signals callers to fast-fail instead of retrying."""
     pass
 
+from google.genai.errors import ClientError
+
+def classify_gemini_error(e: Exception) -> str:
+    if not isinstance(e, ClientError) or e.code != 429:
+        return "unknown"
+    err = (e.details or {}).get("error", e.details) if isinstance(e.details, dict) else {}
+    if not isinstance(err, dict):
+        return "unknown"
+    quota_ids = [
+        v.get("quotaId", "")
+        for d in err.get("details", []) if isinstance(d, dict) and "QuotaFailure" in d.get("@type", "")
+        for v in d.get("violations", [])
+    ]
+    if any("PerDay" in q for q in quota_ids):
+        return "daily_quota"      # fast-fail，不重试
+    if quota_ids:
+        return "transient"        # 走原有重试+退避
+    return "unknown"               # 429 但解析不出 QuotaFailure 结构时，保守起见不要 fast-fail
+
 def batch_translate(
     annotations: dict[str, dict],
     target_lang: str,
@@ -766,21 +785,14 @@ Words/Phrases to translate:
                             )
                             break # Success!
                         except Exception as e:
-                            err_str = str(e).lower()
-                            # ── 区分"配额耗尽"与"临时限流" ──
-                            is_quota_exhausted = (
-                                "resource_exhausted" in err_str
-                                or "quota" in err_str
-                                or "daily limit" in err_str
-                                or "rate limit" in err_str and "per day" in err_str
-                            )
-                            if is_quota_exhausted:
+                            error_type = classify_gemini_error(e)
+                            if error_type == "daily_quota":
                                 print(f"[FATAL] Gemini API quota exhausted at batch {batch_num + 1}/{total_batches}: {e}")
                                 print(f"[FATAL] Aborting all remaining translation batches. {len(to_translate) - i - len(chunk)} words left untranslated.")
                                 raise GeminiQuotaExhaustedError(str(e)) from e
 
                             # Temporary 429 or transient error → retry with backoff
-                            print(f"Gemini translation batch {batch_num} attempt {attempt+1} failed (transient): {e}")
+                            print(f"Gemini translation batch {batch_num} attempt {attempt+1} failed ({error_type}): {e}")
                             if attempt < 2:
                                 backoff = 2 ** (attempt + 1)  # 2s, 4s
                                 print(f"  Retrying in {backoff}s...")

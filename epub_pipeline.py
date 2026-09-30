@@ -316,14 +316,15 @@ def annotate_block_element(elem: ET._Element, candidate_dict: dict[str, dict], t
 # ── Two-Pass Engine ─────────────────────────────────────────────────────────
 
 def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
-                              difficulty_threshold: int) -> dict[str, dict]:
+                              difficulty_threshold: int) -> tuple[dict[str, dict], int]:
     """
     Pass 1: Stream-reads each chapter, extracts visible text paragraphs,
     runs analyze_text, and collects all candidate words/phrases >= difficulty_threshold.
-    Returns global candidate_meta dictionary, truncated to MAX_CANDIDATES by frequency.
+    Returns global candidate_meta dictionary and the total number of valid paragraphs.
     """
     candidate_meta: dict[str, dict] = {}
     candidate_freq: Counter = Counter()  # 统计每个 key 在全书中出现的段落次数
+    valid_paragraphs_count = 0
 
     for chapter_path in chapter_paths:
         try:
@@ -345,6 +346,7 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
                 p_text = "".join(p.itertext()).strip()
                 if not p_text or len(p_text) < 3:
                     continue
+                valid_paragraphs_count += 1
 
                 # Run NLP analysis on paragraph
                 annotations = backend.analyze_text(p_text)
@@ -386,7 +388,7 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
         print(f"[PASS1] Candidate vocabulary size: {pre_truncate_count} (within limit={MAX_CANDIDATES})")
 
     gc.collect()
-    return candidate_meta
+    return candidate_meta, valid_paragraphs_count
 
 
 def run_phase15_translate(candidate_meta: dict[str, dict], target_lang: str, book_hash: str):
@@ -511,7 +513,7 @@ def process_epub_file(input_epub_path: str, output_epub_path: str,
         # 3. Pass 1: Scan & Deduplicate Vocabulary
         if progress_callback:
             progress_callback(15, f"正在扫描全书章节并提取难词 (共 {len(chapter_paths)} 章)...")
-        candidate_meta = run_pass1_scan_vocabulary(zip_in, chapter_paths, difficulty_level)
+        candidate_meta, valid_paragraphs_count = run_pass1_scan_vocabulary(zip_in, chapter_paths, difficulty_level)
 
         # 4. Phase 1.5: Batch Translate
         print(f"[DEBUG] candidate_meta size: {len(candidate_meta)}")
@@ -547,5 +549,6 @@ def process_epub_file(input_epub_path: str, output_epub_path: str,
             "book_hash": book_hash,
             "total_chapters": len(chapter_paths),
             "total_unique_words": len(candidate_meta),
-            "annotated_count": stats["annotated_count"]
+            "annotated_count": stats["annotated_count"],
+            "valid_paragraphs_count": valid_paragraphs_count
         }
