@@ -412,21 +412,11 @@ function App() {
             )}
 
             <div className="level-control" style={{ marginBottom: '32px', marginTop: '20px' }}>
-              <div className="level-header">
-                <label>Your Reading Level:</label>
-                <span className="level-value">{displayLevel}</span>
+              <div className="level-header" style={{ justifyContent: 'center' }}>
+                <span className="level-value" style={{ fontSize: '14px', color: '#a1a1aa' }}>
+                  翻译难度：{displayLevel}（在左侧面板调整）
+                </span>
               </div>
-              <input 
-                type="range" 
-                min="500" 
-                max="1500" 
-                step="50" 
-                value={displayLevel} 
-                onChange={(e) => setDisplayLevel(Number(e.target.value))} 
-                className="level-slider" 
-                disabled={isUploadingEpub} 
-              />
-              <div className="level-labels"><span>Beginner</span><span>Intermediate</span><span>Advanced</span></div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
