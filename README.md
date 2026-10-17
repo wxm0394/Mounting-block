@@ -13,9 +13,11 @@ If `venv` is already initialized in the repository, you can skip to Step 3. Othe
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
+pip install -r requirements.lock.txt
+# 或者使用普通依赖声明: pip install -r requirements.txt && python -m spacy download en_core_web_sm
 ```
+
+> **注意（部署与依赖管理规范）**：生产和新环境部署一律使用 lock 文件安装（`pip install -r requirements.lock.txt`，已包含 `python-multipart` 及 `en_core_web_sm` 模型）。升级依赖时须重新导出 lock 文件，且必须先出 Implementation Plan。
 
 ### 2. Set Environment Variables
 The application relies on the Gemini API to fetch contextual translations:
