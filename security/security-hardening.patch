@@ -1,0 +1,112 @@
+--- a/backend.py
++++ b/backend.py
+@@ -21,7 +21,8 @@
+ import json
+ import hashlib
+ import hmac
+-from typing import Optional, Dict, Any
++import time
++from typing import Optional, Dict, Any, Literal
+ import sqlite3
+ import os
+ import sys
+@@ -30,6 +31,10 @@
+ 
+ # Redirect stdout to a file for debugging
+ log_file = open('/tmp/backend_debug.log', 'a', buffering=1)
++try:
++    os.chmod('/tmp/backend_debug.log', 0o600)
++except OSError:
++    pass
+ sys.stdout = log_file
+ sys.stderr = log_file
+ 
+@@ -39,8 +44,12 @@
+ 
+ app.add_middleware(
+     CORSMiddleware,
+-    allow_origins=["*"],
+-    allow_credentials=True,
++    allow_origins=[
++        "https://levelnread.com",
++        "https://www.levelnread.com",
++        "http://localhost:5173",
++    ],
++    allow_credentials=False,
+     allow_methods=["*"],
+     allow_headers=["*"],
+ )
+@@ -72,9 +81,10 @@
+             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+         return user_res.user
+     except Exception as e:
++        logger.warning(f"Authentication failed: {e}")
+         raise HTTPException(
+             status_code=status.HTTP_401_UNAUTHORIZED,
+-            detail=f"Authentication failed: {str(e)}"
++            detail="Invalid or expired token"
+         )
+ 
+ def get_user_profile(user_id: str):
+@@ -119,9 +129,12 @@
+         }).execute()
+         return current + char_count
+ 
++MAX_TEXT_CHARS = 80000
++MAX_EPUB_BYTES = 50 * 1024 * 1024
++
+ class AnnotationRequest(BaseModel):
+-    text: str
+-    target_lang: str = "zh-Hans"   # target native language for translation
++    text: str = Field(max_length=MAX_TEXT_CHARS)
++    target_lang: Literal["zh-Hans", "zh-Hant", "fr", "es"] = "zh-Hans"   # target native language for translation
+ 
+ 
+ import sqlite3
+@@ -727,6 +740,12 @@
+         return "transient"        # 走原有重试+退避
+     return "unknown"               # 429 但解析不出 QuotaFailure 结构时，保守起见不要 fast-fail
+ 
++def clean_translation(t: str) -> str:
++    """Strip URLs / angle brackets and cap length before caching model output."""
++    t = re.sub(r'https?://\S+|www\.\S+', '', t or '')
++    t = re.sub(r'[<>]', '', t)
++    return t.strip()[:80]
++
+ def batch_translate(
+     annotations: dict[str, dict],
+     target_lang: str,
+@@ -839,7 +858,7 @@
+                                 # 锚定校验 2: 确保该短语确实存在于源文中 (防模型编造幻觉)
+                                 # 注意: skip_source_check 仅跳过校验 2 (EPUB 全书词表预先提取自原书，无局部字面包含限制，全书模式下不传单段全文)。
+                                 if skip_source_check or (key in source_text.lower()):
+-                                    set_cached_translation(key, target_lang, doc_hash, item.get("translation", ""))
++                                    set_cached_translation(key, target_lang, doc_hash, clean_translation(item.get("translation", "")))
+                                 else:
+                                     print(f"Key '{key}' not in source text")
+                             else:
+@@ -967,10 +986,13 @@
+         )
+ 
+     task_id = str(uuid.uuid4())
+-    storage_path = f"{user.id}/{task_id}/{file.filename}"
++    safe_name = re.sub(r'[^\w.\- ]', '_', os.path.basename(file.filename or "book.epub"))[:100]
++    storage_path = f"{user.id}/{task_id}/{safe_name}"
+     
+     # Read and validate file content
+-    content = await file.read()
++    content = await file.read(MAX_EPUB_BYTES + 1)
++    if len(content) > MAX_EPUB_BYTES:
++        raise HTTPException(status_code=413, detail="文件过大（上限 50MB）")
+     import zipfile
+     import io
+     if not zipfile.is_zipfile(io.BytesIO(content)):
+@@ -991,7 +1013,7 @@
+         "status": "pending",
+         "target_lang": target_lang,
+         "difficulty_level": difficulty_level,
+-        "original_filename": file.filename,
++        "original_filename": safe_name,
+         "storage_input_path": storage_path
+     }).execute()
+ 
