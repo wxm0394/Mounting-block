@@ -127,6 +127,8 @@ function App() {
         } else if (response.status === 401) {
           setError('认证失败或 Session 已过期，请重新登录。');
           supabase.auth.signOut();
+        } else if (response.status === 422) {
+          setError('文本超过 8 万字上限');
         } else {
           setError(`后端返回错误（status: ${response.status}），请检查后端终端日志`);
         }
@@ -208,7 +210,17 @@ function App() {
         let detail = '上传失败';
         try {
           const errData = await response.json();
-          detail = errData.detail || detail;
+          if (Array.isArray(errData?.detail)) {
+            detail = errData.detail
+              .map((d: any) => d.msg || (typeof d === 'string' ? d : JSON.stringify(d)))
+              .join('; ');
+          } else if (typeof errData?.detail === 'string') {
+            detail = errData.detail;
+          } else if (errData?.detail && typeof errData.detail === 'object') {
+            detail = JSON.stringify(errData.detail);
+          } else if (response.status === 422) {
+            detail = '上传参数格式校验失败';
+          }
         } catch {
           detail = `上传请求失败 (HTTP ${response.status})`;
         }
@@ -302,10 +314,16 @@ function App() {
 
           {mode === 'text' ? (
             <div className="text-input-wrapper">
-              <label>Paste English Text:</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <label style={{ margin: 0 }}>Paste English Text:</label>
+                <span style={{ fontSize: '0.8rem', color: text.length >= 80000 ? '#ef4444' : '#a1a1aa' }}>
+                  {text.length.toLocaleString()} / 80,000
+                </span>
+              </div>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
+                maxLength={80000}
                 className="text-input"
                 placeholder="Paste any English paragraph here..."
               />
