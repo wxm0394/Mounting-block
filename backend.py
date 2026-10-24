@@ -132,9 +132,11 @@ def try_consume_quota(user_id: str, char_count: int, limit: int):
 MAX_TEXT_CHARS = 80000
 MAX_EPUB_BYTES = 50 * 1024 * 1024
 
+TargetLang = Literal["zh-Hans", "zh-Hant", "fr", "es"]
+
 class AnnotationRequest(BaseModel):
     text: str = Field(max_length=MAX_TEXT_CHARS)
-    target_lang: Literal["zh-Hans", "zh-Hant", "fr", "es"] = "zh-Hans"   # target native language for translation
+    target_lang: TargetLang = "zh-Hans"   # target native language for translation
 
 
 import sqlite3
@@ -967,8 +969,8 @@ def annotate_endpoint(req: AnnotationRequest, user = Depends(get_current_user)):
 @app.post("/epub/upload")
 async def upload_epub(
     file: UploadFile = File(...),
-    difficulty_level: int = Form(900),
-    target_lang: str = Form("zh-Hans"),
+    difficulty_level: int = Form(900, ge=500, le=1500),
+    target_lang: TargetLang = Form("zh-Hans"),
     user = Depends(get_current_user)
 ):
     """
