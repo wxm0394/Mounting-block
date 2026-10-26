@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/auth';
 import { annotateText, MOCK_DICTIONARY } from './lib/annotator';
@@ -42,6 +42,37 @@ function paginateText(text: string, charsPerPage = 1200): string[] {
   }
   return pages.length > 0 ? pages : [""];
 }
+interface EpubTaskItem {
+  id: string;
+  original_filename: string;
+  difficulty_level: number;
+  target_lang: string;
+  status: 'pending' | 'scanning' | 'translating' | 'generating' | 'completed' | 'failed' | string;
+  progress_percent: number;
+  current_step_desc: string;
+  error_message?: string;
+  storage_output_path?: string;
+  created_at: string;
+  updated_at: string;
+  download_url?: string;
+}
+
+function formatTime(isoStr: string): string {
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return isoStr;
+  }
+}
+
+function isTaskTimedOut(task: EpubTaskItem): boolean {
+  if (!['pending', 'scanning', 'translating', 'generating'].includes(task.status)) {
+    return false;
+  }
+  const updatedTime = new Date(task.updated_at || task.created_at).getTime();
+  return Date.now() - updatedTime > 15 * 60 * 1000;
+}
 
 function App() {
   const [text, setText] = useState('');
@@ -54,12 +85,16 @@ function App() {
   const [mode, setMode] = useState<'text' | 'epub'>('text');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showEpubModal, setShowEpubModal] = useState(false);
-  const [epubTaskId, setEpubTaskId] = useState<string | null>(null);
-  const [epubTaskStatus, setEpubTaskStatus] = useState<string | null>(null);
-  const [epubTaskProgress, setEpubTaskProgress] = useState(0);
-  const [epubTaskDesc, setEpubTaskDesc] = useState('');
-  const [epubTaskError, setEpubTaskError] = useState<string | null>(null);
-  const [epubDownloadUrl, setEpubDownloadUrl] = useState<string | null>(null);
+  const [epubTasks, setEpubTasks] = useState<EpubTaskItem[]>([]);
+  const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('rl_hidden_task_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingEpub, setIsUploadingEpub] = useState(false);
   const [uploadSuccessNotice, setUploadSuccessNotice] = useState<string | null>(null);
   const [uploadModalError, setUploadModalError] = useState<string | null>(null);
@@ -148,27 +183,102 @@ function App() {
     };
   }, [text]);
 
-  useEffect(() => {
-    if (!epubTaskId || epubTaskStatus === 'completed' || epubTaskStatus === 'failed') return;
-    const interval = setInterval(async () => {
-      const { data } = await supabase.from('epub_tasks').select('*').eq('id', epubTaskId).single();
-      if (data) {
-        setEpubTaskStatus(data.status);
-        setEpubTaskProgress(data.progress_percent);
-        setEpubTaskDesc(data.current_step_desc || '');
-        if (data.status === 'failed') setEpubTaskError(data.error_message || '未知错误');
-        if (data.status === 'completed') {
-          if (data.download_url) {
-            setEpubDownloadUrl(data.download_url);
-          } else if (data.storage_output_path) {
-            const { data: signedUrlData } = await supabase.storage.from('epubs').createSignedUrl(data.storage_output_path, 3600);
-            if (signedUrlData) setEpubDownloadUrl(signedUrlData.signedUrl);
-          }
-        }
+  const fetchEpubTasks = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+    try {
+      const { data, error: fetchErr } = await supabase
+        .from('epub_tasks')
+        .select('*')
+        .gte('created_at', threeHoursAgo)
+        .order('created_at', { ascending: false });
+
+      if (fetchErr) {
+        console.error('Error fetching epub tasks:', fetchErr);
+        return;
       }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [epubTaskId, epubTaskStatus]);
+
+      if (data) {
+        const enriched: EpubTaskItem[] = await Promise.all(
+          data.map(async (task: any) => {
+            let download_url = task.download_url;
+            if (task.status === 'completed' && task.storage_output_path && !download_url) {
+              try {
+                const { data: signedData } = await supabase.storage
+                  .from('epubs')
+                  .createSignedUrl(task.storage_output_path, 3600);
+                if (signedData?.signedUrl) {
+                  download_url = signedData.signedUrl;
+                }
+              } catch {
+                // Ignore signed url generation errors
+              }
+            }
+            return {
+              ...task,
+              download_url,
+            };
+          })
+        );
+        setEpubTasks(enriched);
+      }
+    } catch (err) {
+      console.error('Failed to load epub tasks:', err);
+    }
+  }, [session?.user?.id]);
+
+  // Initial fetch on session or mode change
+  useEffect(() => {
+    if (session?.user?.id && mode === 'epub') {
+      fetchEpubTasks();
+    }
+  }, [session?.user?.id, mode, fetchEpubTasks]);
+
+  // Polling for active tasks (with tab visibility awareness)
+  useEffect(() => {
+    if (!session?.user?.id || mode !== 'epub') return;
+
+    const visible = epubTasks.filter(t => !hiddenTaskIds.includes(t.id));
+    const hasActiveTask = visible.some(t =>
+      ['pending', 'scanning', 'translating', 'generating'].includes(t.status)
+    );
+
+    if (!hasActiveTask) return;
+
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchEpubTasks();
+      }
+    }, 3000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchEpubTasks();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [session?.user?.id, mode, epubTasks, hiddenTaskIds, fetchEpubTasks]);
+
+  const handleHideTask = (taskId: string) => {
+    setHiddenTaskIds(prev => {
+      const updated = prev.includes(taskId) ? prev : [...prev, taskId];
+      try {
+        localStorage.setItem('rl_hidden_task_ids', JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+  };
+
+  const visibleTasks = useMemo(() => {
+    return epubTasks.filter(t => !hiddenTaskIds.includes(t.id));
+  }, [epubTasks, hiddenTaskIds]);
 
   const handleUploadEpub = async () => {
     if (!selectedFile || isUploadingEpub) return;
@@ -191,20 +301,18 @@ function App() {
         body: formData
       });
       if (response.ok) {
-        const data = await response.json();
-        // 成功创建任务：关闭弹窗，重置任务状态，并显示明显的即时成功确认
+        // 成功创建任务：关闭弹窗，清空文件输入框，重置选择
         setShowEpubModal(false);
         setIsUploadingEpub(false);
-        setEpubTaskId(data.task_id);
-        setEpubTaskStatus('pending');
-        setEpubTaskProgress(0);
-        setEpubTaskDesc('任务已提交，排队等待处理...');
-        setEpubTaskError(null);
-        setEpubDownloadUrl(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        setSelectedFile(null);
         setUploadSuccessNotice('🎉 文件已上传成功！任务已创建，开始排队处理。');
         setTimeout(() => {
           setUploadSuccessNotice(null);
         }, 6000);
+        fetchEpubTasks();
       } else {
         setIsUploadingEpub(false);
         let detail = '上传失败';
@@ -226,12 +334,20 @@ function App() {
         }
         setUploadModalError(detail);
         setError(`EPUB 上传失败: ${detail}`);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        setSelectedFile(null);
       }
     } catch (err: any) {
       setIsUploadingEpub(false);
       const msg = err?.message || '网络连接失败，请检查网络连接或服务器状态';
       setUploadModalError(msg);
       setError(`EPUB 上传异常: ${msg}`);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setSelectedFile(null);
     }
   };
 
@@ -331,8 +447,30 @@ function App() {
           ) : (
             <div className="text-input-wrapper" style={{ marginTop: '20px' }}>
                <label>Upload EPUB:</label>
-               <input type="file" accept=".epub" onChange={e => setSelectedFile(e.target.files?.[0] || null)} style={{ marginBottom: '16px', display: 'block', color: '#e4e4e7', width: '100%' }} />
-               <button disabled={!selectedFile} onClick={() => setShowEpubModal(true)} style={{ padding: '10px 16px', background: selectedFile ? '#3b82f6' : '#27272a', color: 'white', border: 'none', borderRadius: '6px', cursor: selectedFile ? 'pointer' : 'not-allowed', width: '100%', fontWeight: 600 }}>Upload & Translate</button>
+               <input
+                 ref={fileInputRef}
+                 type="file"
+                 accept=".epub"
+                 disabled={isUploadingEpub}
+                 onChange={e => setSelectedFile(e.target.files?.[0] || null)}
+                 style={{ marginBottom: '16px', display: 'block', color: '#e4e4e7', width: '100%', opacity: isUploadingEpub ? 0.6 : 1 }}
+               />
+               <button
+                 disabled={!selectedFile || isUploadingEpub}
+                 onClick={() => setShowEpubModal(true)}
+                 style={{
+                   padding: '10px 16px',
+                   background: (!selectedFile || isUploadingEpub) ? '#27272a' : '#3b82f6',
+                   color: 'white',
+                   border: 'none',
+                   borderRadius: '6px',
+                   cursor: (!selectedFile || isUploadingEpub) ? 'not-allowed' : 'pointer',
+                   width: '100%',
+                   fontWeight: 600
+                 }}
+               >
+                 {isUploadingEpub ? 'Uploading...' : 'Upload & Translate'}
+               </button>
             </div>
           )}
         </div>
@@ -387,31 +525,130 @@ function App() {
             </div>
           )}
 
-          {mode === 'epub' && epubTaskId && (
-             <div style={{ background: '#18181b', padding: '24px', borderRadius: '12px', border: '1px solid #3f3f46', marginTop: '10px' }}>
-               <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#e4e4e7' }}>EPUB Translation Status</h3>
-               {epubTaskError ? (
-                 <div style={{ color: '#ef4444', padding: '12px', background: '#450a0a', borderRadius: '6px' }}>❌ {epubTaskError}</div>
-               ) : epubTaskStatus === 'completed' && epubDownloadUrl ? (
-                 <div style={{ textAlign: 'center', padding: '20px' }}>
-                   <div style={{ color: '#22c55e', marginBottom: '24px', fontSize: '1.2rem', fontWeight: 600 }}>✅ Translation Complete!</div>
-                   <a href={epubDownloadUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '12px 24px', background: '#3b82f6', color: 'white', textDecoration: 'none', borderRadius: '6px', fontWeight: 600 }}>
-                     Download Translated EPUB
-                   </a>
-                 </div>
-               ) : (
-                 <div>
-                   <div style={{ marginBottom: '12px', color: '#a1a1aa', display: 'flex', justifyContent: 'space-between' }}>
-                     <span>Status: {epubTaskStatus || 'Starting...'}</span>
-                     <span>{epubTaskProgress}%</span>
-                   </div>
-                   <div style={{ background: '#27272a', height: '12px', borderRadius: '6px', overflow: 'hidden', marginBottom: '16px' }}>
-                     <div style={{ width: `${epubTaskProgress}%`, background: '#3b82f6', height: '100%', transition: 'width 0.5s ease' }}></div>
-                   </div>
-                   <div style={{ color: '#e4e4e7', fontSize: '0.95rem' }}>{epubTaskDesc}</div>
-                 </div>
-               )}
-             </div>
+          {mode === 'epub' && (
+            <div style={{ marginTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3 style={{ margin: 0, color: '#e4e4e7', fontSize: '1.05rem', fontWeight: 600 }}>
+                  EPUB 任务列表 (最近 3 小时)
+                </h3>
+                <span style={{ fontSize: '12px', color: '#71717a' }}>
+                  共 {visibleTasks.length} 个任务
+                </span>
+              </div>
+
+              {visibleTasks.length === 0 ? (
+                <div style={{ background: '#18181b', padding: '36px 20px', borderRadius: '12px', border: '1px dashed #3f3f46', textAlign: 'center', color: '#71717a' }}>
+                  <p style={{ margin: 0, fontSize: '14px' }}>暂无最近 3 小时内的任务记录。</p>
+                  <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#52525b' }}>可在左侧选择并上传 EPUB 文件发起翻译任务。</p>
+                </div>
+              ) : (
+                visibleTasks.map((task) => {
+                  const isTimedOut = isTaskTimedOut(task);
+                  return (
+                    <div
+                      key={task.id}
+                      style={{
+                        background: '#18181b',
+                        padding: '18px 20px',
+                        borderRadius: '12px',
+                        border: '1px solid #3f3f46',
+                        marginBottom: '14px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <strong style={{ color: '#e4e4e7', fontSize: '14px', wordBreak: 'break-all' }}>
+                              📄 {task.original_filename}
+                            </strong>
+                            <span style={{ fontSize: '11px', color: '#a1a1aa', background: '#27272a', padding: '2px 6px', borderRadius: '4px' }}>
+                              难度: {task.difficulty_level}
+                            </span>
+                            {isTimedOut && (
+                              <span style={{ fontSize: '11px', color: '#f59e0b', background: '#451a03', border: '1px solid #78350f', padding: '2px 6px', borderRadius: '4px' }}>
+                                ⏱️ 处理超时（可能已中断）
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#71717a', marginTop: '4px' }}>
+                            提交时间: {formatTime(task.created_at)}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          title="从列表中隐藏此任务"
+                          onClick={() => handleHideTask(task.id)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#71717a',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            lineHeight: 1,
+                            padding: '4px 6px',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {task.status === 'failed' ? (
+                        <div style={{ color: '#ef4444', padding: '10px 14px', background: '#450a0a', borderRadius: '6px', fontSize: '13px', border: '1px solid #7f1d1d' }}>
+                          ❌ 处理失败: {task.error_message || '未知错误'}
+                        </div>
+                      ) : task.status === 'completed' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#052e16', padding: '12px 16px', borderRadius: '8px', border: '1px solid #14532d' }}>
+                          <span style={{ color: '#4ade80', fontSize: '13px', fontWeight: 600 }}>
+                            ✅ 翻译生成完成！
+                          </span>
+                          {task.download_url ? (
+                            <a
+                              href={task.download_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'inline-block',
+                                padding: '6px 14px',
+                                background: '#22c55e',
+                                color: '#052e16',
+                                textDecoration: 'none',
+                                borderRadius: '6px',
+                                fontWeight: 700,
+                                fontSize: '12px'
+                              }}
+                            >
+                              下载标注版 EPUB
+                            </a>
+                          ) : (
+                            <span style={{ color: '#86efac', fontSize: '12px' }}>准备就绪</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <div style={{ marginBottom: '8px', color: '#a1a1aa', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                            <span>{task.current_step_desc || `状态: ${task.status}`}</span>
+                            <span style={{ fontWeight: 600, color: '#38bdf8' }}>{task.progress_percent}%</span>
+                          </div>
+                          <div style={{ background: '#27272a', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                width: `${task.progress_percent}%`,
+                                background: '#38bdf8',
+                                height: '100%',
+                                transition: 'width 0.4s ease'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           )}
         </div>
 
