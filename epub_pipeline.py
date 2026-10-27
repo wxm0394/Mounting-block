@@ -17,6 +17,7 @@ import hashlib
 from xml.sax.saxutils import escape
 import lxml.etree as ET
 
+from epub_blocks import find_text_blocks
 import backend
 
 # ── Hard cap on candidate vocabulary to bound Gemini API usage ────────
@@ -331,20 +332,10 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
             raw_bytes = zip_in.read(chapter_path)
             tree = ET.fromstring(raw_bytes, parser=ET.XMLParser(recover=True))
             
-            # Strip header tags so their text isn't extracted when getting div.itertext()
-            for h in tree.xpath("//*[local-name()='h1' or local-name()='h2' or local-name()='h3' or local-name()='h4' or local-name()='h5' or local-name()='h6']"):
-                parent = h.getparent()
-                if parent is not None:
-                    parent.remove(h)
-                
-            # Find all text-bearing paragraph elements (p, li, blockquote)
-            # Note: 同 Pass 2，排除 div 避免将外层章节大容器整章文本合并不必要地送入 NLP。
-            paragraphs = tree.xpath(
-                "//*[local-name()='p' or local-name()='li' or local-name()='blockquote']"
-            )
-            for p in paragraphs:
-                p_text = "".join(p.itertext()).strip()
-                if not p_text or len(p_text) < 10:
+            blocks = find_text_blocks(tree)
+            for block in blocks:
+                p_text = "".join(block.itertext()).strip()
+                if len(p_text) < 10:
                     continue
                 valid_paragraphs_count += 1
 
@@ -457,14 +448,8 @@ def run_pass2_transform_and_pack(zip_in: zipfile.ZipFile, output_epub_path: str,
                     style_elem.text = ET.CDATA(READLEVEL_INLINE_CSS)
                     head_elem[0].append(style_elem)
 
-                # Process content block tags: p, li, blockquote
-                # Note: div 被有意排除在 content_blocks 之外（已知取舍）：
-                # 很多 EPUB 会用整章外层包裹 <div class="chapter">，若将 div 纳入 content_blocks，
-                # 其内部任意段落命中难词均会导致外层大容器被贴上 .annotated-para，从而将整个章节（包括无生词段落）
-                # 的行高全局拉宽至 2.6，破坏原书正常排版。因此仅对语义段落标签 (p, li, blockquote) 进行独立标注与行高控制。
-                content_blocks = tree.xpath(
-                    "//*[local-name()='p' or local-name()='li' or local-name()='blockquote']"
-                )
+                # Process leaf text blocks via find_text_blocks (shared with Pass 1)
+                content_blocks = find_text_blocks(tree)
                 for block in content_blocks:
                     block_matched = annotate_block_element(
                         block, candidate_meta, translations_cache, chapter_counts, per_chapter_limit
