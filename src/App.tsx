@@ -49,12 +49,42 @@ interface EpubTaskItem {
   target_lang: string;
   status: 'pending' | 'scanning' | 'translating' | 'generating' | 'completed' | 'failed' | string;
   progress_percent: number;
-  current_step_desc: string;
-  error_message?: string;
-  storage_output_path?: string;
+  current_step_desc: string | null;
+  error_message: string | null;
+  storage_output_path: string | null;
+  download_url: string | null;
   created_at: string;
   updated_at: string;
-  download_url?: string;
+  completed_at: string | null;
+}
+
+// 只取界面用到的列；不取 error_detail（内部堆栈）、failed_words 等大字段
+const EPUB_TASK_COLUMNS =
+  'id,original_filename,difficulty_level,target_lang,status,progress_percent,current_step_desc,' +
+  'error_message,storage_output_path,download_url,created_at,updated_at,completed_at';
+const ACTIVE_STATUSES = ['pending', 'scanning', 'translating', 'generating'];
+const TASK_WINDOW_MS = 3 * 3600 * 1000;
+const TASK_TIMEOUT_MS = 90 * 60 * 1000;
+const LEGACY_HIDDEN_KEY = 'rl_hidden_task_ids';
+const hiddenKeyFor = (userId: string) => `rl_hidden_task_ids:${userId}`;
+
+function loadHiddenIds(userId: string): string[] {
+  try {
+    const raw = localStorage.getItem(hiddenKeyFor(userId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x: unknown) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHiddenIds(userId: string, ids: string[]) {
+  try {
+    if (ids.length === 0) localStorage.removeItem(hiddenKeyFor(userId));
+    else localStorage.setItem(hiddenKeyFor(userId), JSON.stringify(ids));
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 function formatTime(isoStr: string): string {
@@ -67,11 +97,11 @@ function formatTime(isoStr: string): string {
 }
 
 function isTaskTimedOut(task: EpubTaskItem): boolean {
-  if (!['pending', 'scanning', 'translating', 'generating'].includes(task.status)) {
+  if (!ACTIVE_STATUSES.includes(task.status)) {
     return false;
   }
   const updatedTime = new Date(task.updated_at || task.created_at).getTime();
-  return Date.now() - updatedTime > 15 * 60 * 1000;
+  return Date.now() - updatedTime > TASK_TIMEOUT_MS;
 }
 
 function App() {
@@ -86,14 +116,10 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showEpubModal, setShowEpubModal] = useState(false);
   const [epubTasks, setEpubTasks] = useState<EpubTaskItem[]>([]);
-  const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('rl_hidden_task_ids');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>([]);
+  const [downloadingTaskId, setDownloadingTaskId] = useState<string | null>(null);
+  const [downloadErrors, setDownloadErrors] = useState<Record<string, string>>({});
+  const currentUidRef = useRef<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingEpub, setIsUploadingEpub] = useState(false);
   const [uploadSuccessNotice, setUploadSuccessNotice] = useState<string | null>(null);
@@ -183,45 +209,49 @@ function App() {
     };
   }, [text]);
 
-  const fetchEpubTasks = useCallback(async () => {
-    if (!session?.user?.id) return;
-    const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+  // 用户切换时载入该用户自己的隐藏列表；旧版不带用户 id 的键无法判断归属，直接删除
+  useEffect(() => {
+    const uid = session?.user?.id;
+    currentUidRef.current = uid;
     try {
+      localStorage.removeItem(LEGACY_HIDDEN_KEY);
+    } catch {
+      // ignore
+    }
+    setHiddenTaskIds(uid ? loadHiddenIds(uid) : []);
+    setEpubTasks([]);
+  }, [session?.user?.id]);
+
+  const fetchEpubTasks = useCallback(async () => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const windowStart = new Date(Date.now() - TASK_WINDOW_MS).toISOString();
+    try {
+      // 窗口：进行中（不限时间） 或 completed_at 在 3 小时内
       const { data, error: fetchErr } = await supabase
         .from('epub_tasks')
-        .select('*')
-        .gte('created_at', threeHoursAgo)
+        .select(EPUB_TASK_COLUMNS)
+        .eq('user_id', uid)
+        .or(`status.in.(${ACTIVE_STATUSES.join(',')}),completed_at.gte."${windowStart}"`)
         .order('created_at', { ascending: false });
 
+      if (currentUidRef.current !== uid) return; // 请求期间切换了账号，丢弃旧结果
       if (fetchErr) {
         console.error('Error fetching epub tasks:', fetchErr);
         return;
       }
 
-      if (data) {
-        const enriched: EpubTaskItem[] = await Promise.all(
-          data.map(async (task: any) => {
-            let download_url = task.download_url;
-            if (task.status === 'completed' && task.storage_output_path && !download_url) {
-              try {
-                const { data: signedData } = await supabase.storage
-                  .from('epubs')
-                  .createSignedUrl(task.storage_output_path, 3600);
-                if (signedData?.signedUrl) {
-                  download_url = signedData.signedUrl;
-                }
-              } catch {
-                // Ignore signed url generation errors
-              }
-            }
-            return {
-              ...task,
-              download_url,
-            };
-          })
-        );
-        setEpubTasks(enriched);
-      }
+      const rows = (data ?? []) as unknown as EpubTaskItem[];
+      setEpubTasks(rows);
+
+      // 清理过期隐藏项：只保留仍在窗口内的任务 id（查询成功才清理，失败时不动）
+      const alive = new Set(rows.map(r => r.id));
+      setHiddenTaskIds(prev => {
+        const kept = prev.filter(id => alive.has(id));
+        if (kept.length === prev.length) return prev;
+        saveHiddenIds(uid, kept);
+        return kept;
+      });
     } catch (err) {
       console.error('Failed to load epub tasks:', err);
     }
@@ -239,9 +269,7 @@ function App() {
     if (!session?.user?.id || mode !== 'epub') return;
 
     const visible = epubTasks.filter(t => !hiddenTaskIds.includes(t.id));
-    const hasActiveTask = visible.some(t =>
-      ['pending', 'scanning', 'translating', 'generating'].includes(t.status)
-    );
+    const hasActiveTask = visible.some(t => ACTIVE_STATUSES.includes(t.status));
 
     if (!hasActiveTask) return;
 
@@ -265,15 +293,40 @@ function App() {
   }, [session?.user?.id, mode, epubTasks, hiddenTaskIds, fetchEpubTasks]);
 
   const handleHideTask = (taskId: string) => {
+    const uid = session?.user?.id;
+    if (!uid) return;
     setHiddenTaskIds(prev => {
-      const updated = prev.includes(taskId) ? prev : [...prev, taskId];
-      try {
-        localStorage.setItem('rl_hidden_task_ids', JSON.stringify(updated));
-      } catch (e) {
-        console.error(e);
-      }
+      if (prev.includes(taskId)) return prev;
+      const updated = [...prev, taskId];
+      saveHiddenIds(uid, updated);
       return updated;
     });
+  };
+
+  // 点击时才取链接：优先用 worker 写入的 download_url（7 天签名），否则临时签 5 分钟
+  const handleDownload = async (task: EpubTaskItem) => {
+    if (downloadingTaskId) return;
+    setDownloadingTaskId(task.id);
+    setDownloadErrors(prev => {
+      const { [task.id]: _drop, ...rest } = prev;
+      return rest;
+    });
+    try {
+      let url = task.download_url || null;
+      if (!url && task.storage_output_path) {
+        const { data: signed, error: signErr } = await supabase.storage
+          .from('epubs')
+          .createSignedUrl(task.storage_output_path, 300, { download: `annotated_${task.original_filename}` });
+        if (signErr) throw signErr;
+        url = signed?.signedUrl ?? null;
+      }
+      if (!url) throw new Error('没有可用的下载链接');
+      window.location.assign(url);
+    } catch (err: any) {
+      setDownloadErrors(prev => ({ ...prev, [task.id]: err?.message || '获取下载链接失败' }));
+    } finally {
+      setDownloadingTaskId(null);
+    }
   };
 
   const visibleTasks = useMemo(() => {
@@ -332,22 +385,15 @@ function App() {
         } catch {
           detail = `上传请求失败 (HTTP ${response.status})`;
         }
+        // 失败时保留已选文件，方便直接重试
         setUploadModalError(detail);
         setError(`EPUB 上传失败: ${detail}`);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        setSelectedFile(null);
       }
     } catch (err: any) {
       setIsUploadingEpub(false);
       const msg = err?.message || '网络连接失败，请检查网络连接或服务器状态';
       setUploadModalError(msg);
       setError(`EPUB 上传异常: ${msg}`);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      setSelectedFile(null);
     }
   };
 
@@ -529,7 +575,7 @@ function App() {
             <div style={{ marginTop: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <h3 style={{ margin: 0, color: '#e4e4e7', fontSize: '1.05rem', fontWeight: 600 }}>
-                  EPUB 任务列表 (最近 3 小时)
+                  EPUB 任务列表 (进行中 / 3 小时内完成)
                 </h3>
                 <span style={{ fontSize: '12px', color: '#71717a' }}>
                   共 {visibleTasks.length} 个任务
@@ -538,7 +584,7 @@ function App() {
 
               {visibleTasks.length === 0 ? (
                 <div style={{ background: '#18181b', padding: '36px 20px', borderRadius: '12px', border: '1px dashed #3f3f46', textAlign: 'center', color: '#71717a' }}>
-                  <p style={{ margin: 0, fontSize: '14px' }}>暂无最近 3 小时内的任务记录。</p>
+                  <p style={{ margin: 0, fontSize: '14px' }}>暂无进行中或 3 小时内完成的任务。</p>
                   <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#52525b' }}>可在左侧选择并上传 EPUB 文件发起翻译任务。</p>
                 </div>
               ) : (
@@ -573,6 +619,7 @@ function App() {
                           </div>
                           <div style={{ fontSize: '11px', color: '#71717a', marginTop: '4px' }}>
                             提交时间: {formatTime(task.created_at)}
+                            {task.completed_at && <> · 完成时间: {formatTime(task.completed_at)}</>}
                           </div>
                         </div>
 
@@ -600,30 +647,38 @@ function App() {
                           ❌ 处理失败: {task.error_message || '未知错误'}
                         </div>
                       ) : task.status === 'completed' ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#052e16', padding: '12px 16px', borderRadius: '8px', border: '1px solid #14532d' }}>
-                          <span style={{ color: '#4ade80', fontSize: '13px', fontWeight: 600 }}>
-                            ✅ 翻译生成完成！
-                          </span>
-                          {task.download_url ? (
-                            <a
-                              href={task.download_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                display: 'inline-block',
-                                padding: '6px 14px',
-                                background: '#22c55e',
-                                color: '#052e16',
-                                textDecoration: 'none',
-                                borderRadius: '6px',
-                                fontWeight: 700,
-                                fontSize: '12px'
-                              }}
-                            >
-                              下载标注版 EPUB
-                            </a>
-                          ) : (
-                            <span style={{ color: '#86efac', fontSize: '12px' }}>准备就绪</span>
+                        <div style={{ background: '#052e16', padding: '12px 16px', borderRadius: '8px', border: '1px solid #14532d' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#4ade80', fontSize: '13px', fontWeight: 600 }}>
+                              ✅ {task.current_step_desc || '翻译生成完成！'}
+                            </span>
+                            {(task.download_url || task.storage_output_path) ? (
+                              <button
+                                type="button"
+                                id={`download-task-${task.id}`}
+                                disabled={downloadingTaskId !== null}
+                                onClick={() => handleDownload(task)}
+                                style={{
+                                  padding: '6px 14px',
+                                  background: downloadingTaskId === task.id ? '#15803d' : '#22c55e',
+                                  color: '#052e16',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '12px',
+                                  cursor: downloadingTaskId !== null ? 'wait' : 'pointer'
+                                }}
+                              >
+                                {downloadingTaskId === task.id ? '获取链接中...' : '下载标注版 EPUB'}
+                              </button>
+                            ) : (
+                              <span style={{ color: '#fca5a5', fontSize: '12px' }}>输出文件缺失</span>
+                            )}
+                          </div>
+                          {downloadErrors[task.id] && (
+                            <div style={{ marginTop: '8px', color: '#fca5a5', fontSize: '12px' }}>
+                              下载失败：{downloadErrors[task.id]}
+                            </div>
                           )}
                         </div>
                       ) : (
