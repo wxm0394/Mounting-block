@@ -382,13 +382,23 @@ def run_pass1_scan_vocabulary(zip_in: zipfile.ZipFile, chapter_paths: list[str],
     return candidate_meta, valid_paragraphs_count
 
 
-def run_phase15_translate(candidate_meta: dict[str, dict], target_lang: str, book_hash: str):
+def run_phase15_translate(candidate_meta: dict[str, dict], target_lang: str, book_hash: str,
+                          progress_callback=None):
     """
     Phase 1.5: Batch translates all deduplicated candidates using backend.batch_translate.
     All translations are persisted to SQLite translation_cache.db under book_hash.
+    progress_callback(percent, step_desc): optional; batch progress is mapped
+    linearly to 40%~75% (40 + int(35 * (batch_idx + 1) / total_batches)),
+    each batch firing one DB progress write as a liveness heartbeat.
     """
     if not candidate_meta:
         return
+
+    def _on_batch(batch_idx: int, total_batches: int):
+        if progress_callback:
+            pct = 40 + int(35 * (batch_idx + 1) / total_batches)
+            progress_callback(pct, f"正在批量翻译全书生词 ({batch_idx + 1}/{total_batches})...")
+
     # Use skip_source_check=True so anchor Check 2 (source text containment) is relaxed
     # for whole-book vocabulary while Check 1 (chunk containment) remains in full force.
     backend.batch_translate(
@@ -396,7 +406,8 @@ def run_phase15_translate(candidate_meta: dict[str, dict], target_lang: str, boo
         target_lang=target_lang,
         source_text="",
         doc_hash=book_hash,
-        skip_source_check=True
+        skip_source_check=True,
+        on_batch_complete=_on_batch
     )
 
 
@@ -507,7 +518,8 @@ def process_epub_file(input_epub_path: str, output_epub_path: str,
         print(f"[DEBUG] candidate_meta size: {len(candidate_meta)}")
         if progress_callback:
             progress_callback(40, f"正在批量翻译全书生词 (去重后共 {len(candidate_meta)} 词)...")
-        run_phase15_translate(candidate_meta, target_lang, book_hash)
+        run_phase15_translate(candidate_meta, target_lang, book_hash,
+                              progress_callback=progress_callback)
 
         # 4.5 Load all translations into memory dictionary
         translations_cache = {}

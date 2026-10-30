@@ -4,7 +4,7 @@ import uuid
 import functools
 import traceback
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from supabase import create_client, Client
 import epub_pipeline
@@ -124,6 +124,47 @@ def update_task_progress(task_id: str, percent: int, desc: str):
     except Exception as e:
         print(f"Warning: Failed to update progress for task {task_id}: {e}")
 
+
+# ── Zombie task reclamation ────────────────────────────────────────────────
+# Tasks stuck in an active state (worker died / process killed) never finish
+# on their own. Reclaim anything untouched for >3h so users can re-upload
+# instead of staring at a frozen progress bar.
+
+ZOMBIE_STATUSES = ("scanning", "translating", "generating")
+ZOMBIE_AFTER_HOURS = 3
+
+
+def _parse_iso(s):
+    """Parse an ISO-8601 timestamp (handles trailing Z)."""
+    if isinstance(s, str) and s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    return datetime.fromisoformat(s)
+
+
+def reclaim_zombie_tasks():
+    """Mark long-stuck active tasks as failed. Returns reclaimed task ids."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=ZOMBIE_AFTER_HOURS)
+    res = supabase.table("epub_tasks").select("id,updated_at").in_(
+        "status", list(ZOMBIE_STATUSES)).lt("updated_at", cutoff.isoformat()).execute()
+    ids = []
+    for row in (res.data or []):
+        try:
+            updated = _parse_iso(row.get("updated_at", ""))
+        except (ValueError, TypeError):
+            continue
+        if updated < cutoff:
+            ids.append(row["id"])
+    if not ids:
+        return []
+    supabase.table("epub_tasks").update({
+        "status": "failed",
+        "error_message": "服务中断，请重新上传",
+        "current_step_desc": "任务超时已终止",
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).in_("id", ids).execute()
+    print(f"[ZOMBIE] Reclaimed {len(ids)} zombie task(s): {ids} -> marked as failed.")
+    return ids
+
 def process_task(task: dict):
     task_id = task["id"]
     input_storage_path = task["storage_input_path"]
@@ -220,9 +261,23 @@ def process_task(task: dict):
 def main():
     print(f"🚀 Starting EPUB Worker [{WORKER_ID}]...")
     print("Polling public.epub_tasks every 3 seconds for new tasks.")
-    
+
+    # Reclaim zombies once at startup, then every 600s in the main loop.
+    # A failed reclaim must never kill the worker; the next cycle retries.
+    try:
+        reclaim_zombie_tasks()
+    except Exception as e:
+        print(f"Zombie reclaim failed at startup: {e}")
+    last_reclaim = time.monotonic()
+
     while True:
         try:
+            if time.monotonic() - last_reclaim >= 600:
+                try:
+                    reclaim_zombie_tasks()
+                except Exception as e:
+                    print(f"Zombie reclaim failed: {e}")
+                last_reclaim = time.monotonic()
             # Atomic claim via RPC
             res = _claim_task()
             

@@ -748,8 +748,16 @@ def batch_translate(
     target_lang: str,
     source_text: str = "",
     doc_hash: str | None = None,
-    skip_source_check: bool = False
+    skip_source_check: bool = False,
+    on_batch_complete=None
 ) -> dict[str, dict]:
+    """Batch-translate annotations via Gemini.
+
+    on_batch_complete(batch_idx, total_batches): optional callback fired
+    after each 50-word chunk completes (success or skip-after-retries),
+    used by the EPUB pipeline as a liveness heartbeat. Not fired when the
+    whole translation aborts on quota exhaustion.
+    """
     if doc_hash is None:
         doc_hash = hashlib.md5(source_text.encode()).hexdigest()
     to_translate = []
@@ -864,10 +872,14 @@ Words/Phrases to translate:
                     raise  # Propagate immediately — no point continuing
                 except Exception as e:
                     print(f"Gemini translation batch {batch_num} failed: {e}")
-                
+
                 # Sleep to prevent rate limiting
                 import time
                 time.sleep(2)
+
+                # Per-batch heartbeat: pipeline maps this to 40%~75% progress
+                if on_batch_complete is not None:
+                    on_batch_complete(batch_num, total_batches)
         except GeminiQuotaExhaustedError:
             print(f"[FATAL] Quota exhausted — aborting batch_translate. Partial translations saved to cache.")
             raise  # Let epub_worker catch this and mark task as failed
