@@ -22,21 +22,18 @@ import json
 import hashlib
 import hmac
 import time
+import logging
 from typing import Optional, Dict, Any, Literal
 import sqlite3
 import os
-import sys
 from wordfreq import zipf_frequency
 import concurrent.futures
 
-# Redirect stdout to a file for debugging
-log_file = open('/tmp/backend_debug.log', 'a', buffering=1)
-try:
-    os.chmod('/tmp/backend_debug.log', 0o600)
-except OSError:
-    pass
-sys.stdout = log_file
-sys.stderr = log_file
+# Standard logging: emit to stdout/stderr, collected by systemd/journald.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -98,8 +95,6 @@ def get_user_profile(user_id: str):
             if attempt == 2:
                 raise e
             time.sleep(0.3)
-
-import logging
 
 logger = logging.getLogger("uvicorn.error")
 

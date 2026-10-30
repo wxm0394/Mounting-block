@@ -1,19 +1,11 @@
-import sys
 import io
 import uuid
 import zipfile
 from unittest.mock import patch, MagicMock
 
-# Save original stdio to prevent backend.py from swallowing test output
-original_stdout = sys.stdout
-original_stderr = sys.stderr
-
 from fastapi.testclient import TestClient
 import backend
 from backend import app, get_current_user, TargetLang, AnnotationRequest
-
-sys.stdout = sys.__stdout__
-sys.stderr = sys.__stderr__
 
 
 def create_dummy_epub_bytes():
