@@ -190,8 +190,12 @@ function App() {
           supabase.auth.signOut();
         } else if (response.status === 422) {
           setError('文本超过 8 万字上限');
+        } else if (response.status === 503) {
+          const errData = await response.json().catch(() => null);
+          setError(errData?.detail || '用户配置服务暂时不可用，请稍后重试');
         } else {
-          setError(`后端返回错误（status: ${response.status}），请检查后端终端日志`);
+          const errData = await response.json().catch(() => null);
+          setError(typeof errData?.detail === 'string' ? errData.detail : `请求失败（status: ${response.status}）`);
         }
       } catch (err: any) {
         if (err.name !== 'AbortError') {

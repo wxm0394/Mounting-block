@@ -141,11 +141,23 @@ def _parse_iso(s):
     return datetime.fromisoformat(s)
 
 
+@supabase_retry
+def _query_zombie_tasks(cutoff_iso: str):
+    """Query long-stuck active tasks (retry-wrapped)."""
+    return supabase.table("epub_tasks").select("id,updated_at").in_(
+        "status", list(ZOMBIE_STATUSES)).lt("updated_at", cutoff_iso).execute()
+
+
+@supabase_retry
+def _batch_fail_zombie_tasks(ids: list[str], payload: dict):
+    """Batch mark zombie tasks as failed (retry-wrapped)."""
+    return supabase.table("epub_tasks").update(payload).in_("id", ids).execute()
+
+
 def reclaim_zombie_tasks():
     """Mark long-stuck active tasks as failed. Returns reclaimed task ids."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ZOMBIE_AFTER_HOURS)
-    res = supabase.table("epub_tasks").select("id,updated_at").in_(
-        "status", list(ZOMBIE_STATUSES)).lt("updated_at", cutoff.isoformat()).execute()
+    res = _query_zombie_tasks(cutoff.isoformat())
     ids = []
     for row in (res.data or []):
         try:
@@ -156,12 +168,12 @@ def reclaim_zombie_tasks():
             ids.append(row["id"])
     if not ids:
         return []
-    supabase.table("epub_tasks").update({
+    _batch_fail_zombie_tasks(ids, {
         "status": "failed",
         "error_message": "服务中断，请重新上传",
         "current_step_desc": "任务超时已终止",
         "updated_at": datetime.now(timezone.utc).isoformat()
-    }).in_("id", ids).execute()
+    })
     print(f"[ZOMBIE] Reclaimed {len(ids)} zombie task(s): {ids} -> marked as failed.")
     return ids
 

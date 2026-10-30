@@ -34,6 +34,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+logger = logging.getLogger("backend")
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -102,8 +103,6 @@ def get_user_profile(user_id: str):
                     detail="用户配置服务暂时不可用，请稍后重试"
                 )
             time.sleep(0.3)
-
-logger = logging.getLogger("uvicorn.error")
 
 from datetime import datetime, timezone
 
