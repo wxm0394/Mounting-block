@@ -90,10 +90,17 @@ def get_user_profile(user_id: str):
             res = supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
             if res.data:
                 return res.data[0]
+            # Query succeeded but no profile row: genuine new/free user.
             return {"is_subscribed": False, "daily_char_limit": 5000}
         except Exception as e:
             if attempt == 2:
-                raise e
+                # DB/network failure is NOT "no profile": fail loudly with 503
+                # instead of silently degrading the user to free tier.
+                logger.error(f"get_user_profile failed after 3 attempts for {user_id}: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="用户配置服务暂时不可用，请稍后重试"
+                )
             time.sleep(0.3)
 
 logger = logging.getLogger("uvicorn.error")
