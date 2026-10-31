@@ -23,6 +23,8 @@ import hashlib
 import hmac
 import time
 import logging
+import urllib.request
+import urllib.error
 from typing import Optional, Dict, Any, Literal
 import sqlite3
 import os
@@ -58,6 +60,14 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"
     lemonsqueezy_webhook_secret: str = ""
+    # Paddle Billing (replaces LemonSqueezy; LS store left dormant in test mode).
+    # All empty by default: endpoints fail closed (503/500) until configured.
+    paddle_api_key: str = ""
+    paddle_webhook_secret: str = ""
+    paddle_environment: str = "sandbox"  # "sandbox" | "live"
+    paddle_price_id_monthly: str = ""
+    paddle_price_id_yearly: str = ""
+    paddle_client_token: str = ""  # public client-side token, Paddle.js overlay fallback only
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -1220,4 +1230,382 @@ async def lemonsqueezy_webhook(
         logger.warning(f"[Webhook] Could not insert webhook_log: {log_err}")
 
     return {"status": "ok", "event_id": event_id}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Paddle Billing 模块（2026-10-31 起替代 LemonSqueezy；LS 店铺留 test mode 备用）
+#
+# 关键事实（Paddle Billing，非已废弃的 Paddle Classic）：
+# - 建单：POST {base}/transactions，Bearer API key；body items=[{price_id, quantity}]、
+#   customer={email} 或顶层 customer_id、custom_data={user_id}；
+#   custom_data 会流向该订阅后续所有 webhook 事件（Billing 会忽略 Classic 的 passthrough）。
+# - 验签：Paddle-Signature 头 `ts=...;h1=...`（密钥轮换时可有多个 h1，任一命中即通过）；
+#   签名 = HMAC-SHA256(secret, "ts:raw_body") 十六进制；必须对原始字节验签，
+#   绝不能先解析 JSON 再重序列化。ts 容差 300 秒（Paddle SDK 默认 5 秒过严，
+#   正常重试会被误杀；300 秒内重放由 event_id 幂等去重挡下）。
+# - 退款：不自动取消订阅。退款通道 = POST {base}/adjustments
+#   {action: "refund", transaction_id, reason, items: [{item_id, type: "full"|"partial", amount?}]}。
+# - 退款默认策略（用户未定正式退款政策前）：已批准的全额退款/拒付 → 记录事件后
+#   经 API 把订阅改为账单周期末取消（effective_from=next_billing_period），
+#   本周期访问权保留（与 LS 宽限期哲学一致）；部分退款只记录、不动权限。
+#   正式退款政策定下来后改这里一处即可。
+# - 退款发起不设 HTTP 端点：本应用无管理员角色，HTTP 退款口会成为滥用面；
+#   运营侧用 scripts/paddle_refund.py 发起（它创建的 adjustment 同样触发本 webhook，
+#   闭环走同一条退款处理逻辑）。
+# - 订阅状态语义（Paddle 与 LS 不同）：subscription.canceled = 取消已生效 → 收回；
+#   预约取消先以 subscription.updated（带 scheduled_change）到达 → 宽限保留；
+#   past_due = Paddle 催款宽限期（默认 30 天）→ 宽限保留；paused → 暂停即收回。
+# - user_profiles.subscription_id / customer_id 两列复用（LS 已休眠）：
+#   存入的将是 Paddle 的 sub_/ctm_ ID；复用为 Paddle customer 时只认 ctm_ 前缀。
+# ═════════════════════════════════════════════════════════════════════════════
+
+def paddle_api_base() -> str:
+    return "https://api.paddle.com" if settings.paddle_environment == "live" else "https://sandbox-api.paddle.com"
+
+
+def paddle_api_request(method: str, path: str, body: Optional[dict] = None) -> dict:
+    """Minimal Paddle Billing API client (stdlib only, no new dependency).
+
+    Raises HTTPException 502 on any Paddle-side failure. Paddle error messages
+    go to logs only; the client-facing detail stays generic (no secrets ever).
+    """
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Paddle not configured")
+    url = paddle_api_base() + path
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method, headers={
+        "Authorization": f"Bearer {settings.paddle_api_key}",
+        "Content-Type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = json.loads(e.read().decode("utf-8"))
+            err_code = (err_body.get("error") or {}).get("code", "unknown")
+        except Exception:
+            err_code = "unparseable"
+        logger.error(f"[Paddle] API {method} {path} failed: HTTP {e.code} code={err_code}")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="Paddle request failed")
+    except Exception as e:
+        logger.error(f"[Paddle] API {method} {path} network error: {type(e).__name__}")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="Paddle request failed")
+
+
+def verify_paddle_signature(raw_bytes: bytes, signature_header: str, secret: str,
+                            tolerance_seconds: int = 300) -> bool:
+    """Verify a Paddle Billing webhook signature. Pure function, unit-tested."""
+    if not signature_header or not secret:
+        return False
+    ts = None
+    h1s = []
+    for part in signature_header.split(";"):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        if key.strip() == "ts":
+            ts = value.strip()
+        elif key.strip() == "h1":
+            h1s.append(value.strip())
+    if not ts or not h1s:
+        return False
+    try:
+        ts_int = int(ts)
+    except ValueError:
+        return False
+    if abs(int(time.time()) - ts_int) > tolerance_seconds:
+        return False
+    expected = hmac.new(secret.encode("utf-8"), f"{ts}:".encode("utf-8") + raw_bytes,
+                        hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, h) for h in h1s)
+
+
+def resolve_paddle_subscription_status(event_type: str, data: dict) -> Optional[bool]:
+    """Map a Paddle event to the target is_subscribed value.
+
+    True = grant, False = revoke now, None = grace (keep current access).
+    Refund/adjustment events are NOT mapped here; the webhook handler deals
+    with them separately (record + cancel-at-period-end).
+    """
+    sub_status = data.get("status")
+    if event_type in ("subscription.activated", "subscription.resumed"):
+        return True
+    if event_type == "subscription.created":
+        return True if sub_status in ("active", "trialing") else None
+    if event_type == "subscription.updated":
+        if sub_status in ("active", "trialing"):
+            return True
+        if sub_status == "past_due":
+            return None
+        if sub_status in ("paused", "canceled"):
+            return False
+        return None
+    if event_type == "subscription.canceled":
+        return False
+    if event_type == "subscription.paused":
+        return False
+    if event_type == "subscription.past_due":
+        return None
+    if event_type == "transaction.completed":
+        # Only subscription payments grant access; one-time products don't exist
+        # in this app, so a transaction without a subscription is ignored.
+        return True if data.get("subscription_id") else None
+    if event_type == "transaction.updated":
+        if sub_status == "completed":
+            return True if data.get("subscription_id") else None
+        if sub_status == "past_due":
+            return None
+        return None
+    return None
+
+
+class PaddleCheckoutRequest(BaseModel):
+    plan: Literal["monthly", "yearly"]
+
+
+@app.get("/billing/config")
+def paddle_billing_config(user=Depends(get_current_user)):
+    """Frontend checkout bootstrap. Price IDs stay server-side (Paddle.js opens
+    by transactionId, so the client never needs pri_ IDs)."""
+    return {
+        "environment": settings.paddle_environment,
+        "client_token": settings.paddle_client_token or None,
+        "plans": {
+            "monthly": bool(settings.paddle_price_id_monthly),
+            "yearly": bool(settings.paddle_price_id_yearly),
+        },
+    }
+
+
+@app.post("/billing/checkout")
+def paddle_create_checkout(req: PaddleCheckoutRequest, user=Depends(get_current_user)):
+    """Create a Paddle transaction for the signed-in user and return the
+    hosted checkout URL (or a transactionId for the Paddle.js overlay fallback).
+
+    Entitlement is NEVER granted here: only a verified webhook may flip
+    is_subscribed (a browser returning from checkout proves nothing).
+    """
+    price_id = (settings.paddle_price_id_monthly if req.plan == "monthly"
+                else settings.paddle_price_id_yearly)
+    if not settings.paddle_api_key:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Paddle not configured")
+    if not price_id:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail=f"Paddle price not configured for plan {req.plan}")
+
+    # Reuse the known Paddle customer when we have one (ctm_ prefix only: the
+    # column previously held LemonSqueezy IDs, which Paddle would reject).
+    paddle_customer_id = None
+    try:
+        prof_res = supabase.table("user_profiles").select("customer_id").eq("user_id", user.id).execute()
+        if prof_res.data:
+            stored = prof_res.data[0].get("customer_id") or ""
+            if stored.startswith("ctm_"):
+                paddle_customer_id = stored
+    except Exception as e:
+        logger.warning(f"[Paddle] Profile lookup failed for checkout, continuing with email: {e}")
+
+    txn_body: Dict[str, Any] = {
+        "items": [{"price_id": price_id, "quantity": 1}],
+        "custom_data": {"user_id": str(user.id)},
+        "collection_mode": "automatic",
+    }
+    if paddle_customer_id:
+        txn_body["customer_id"] = paddle_customer_id
+    else:
+        txn_body["customer"] = {"email": user.email}
+
+    result = paddle_api_request("POST", "/transactions", txn_body)
+    txn = result.get("data") or {}
+    checkout = txn.get("checkout") or {}
+    return {
+        "transaction_id": txn.get("id"),
+        "checkout_url": checkout.get("url"),
+    }
+
+
+def _paddle_event_ids(event_type: str, data: dict):
+    """Extract (subscription_id, customer_id) for a Paddle event payload.
+
+    Subscription objects carry their own id; transaction/adjustment objects
+    carry subscription_id. Transaction ids (txn_...) must never be mistaken
+    for subscription ids."""
+    if event_type.startswith("subscription."):
+        return data.get("id"), data.get("customer_id")
+    return data.get("subscription_id"), data.get("customer_id")
+
+
+def _paddle_lookup_user_by_subscription(subscription_id: Optional[str]) -> Optional[str]:
+    if not subscription_id:
+        return None
+    try:
+        res = supabase.table("user_profiles").select("user_id").eq(
+            "subscription_id", subscription_id).execute()
+        if res.data:
+            return str(res.data[0].get("user_id"))
+    except Exception as e:
+        logger.warning(f"[Paddle] Subscription lookup failed for {subscription_id}: {e}")
+    return None
+
+
+@app.post("/webhook/paddle")
+async def paddle_webhook(request: Request,
+                         paddle_signature: Optional[str] = Header(None, alias="Paddle-Signature")):
+    """Paddle Billing webhook. Mirrors the LemonSqueezy handler's guarantees:
+    signature first (raw bytes), event_id dedup, occurred_at monotonicity,
+    audit rows in webhook_logs. Returns 200 for ignored events too (Paddle
+    retries anything else with backoff)."""
+    if not settings.paddle_webhook_secret:
+        logger.error("[Security] PADDLE_WEBHOOK_SECRET not configured")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Webhook secret not configured")
+    if not paddle_signature:
+        logger.warning("[Security] Missing Paddle-Signature header in webhook request")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Missing Paddle-Signature header")
+
+    raw_bytes = await request.body()
+    if not verify_paddle_signature(raw_bytes, paddle_signature, settings.paddle_webhook_secret):
+        logger.warning("[Security] Paddle webhook signature verification failed")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Invalid signature")
+
+    try:
+        payload = json.loads(raw_bytes.decode("utf-8"))
+    except Exception as e:
+        logger.warning(f"[Webhook] Malformed Paddle JSON payload: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed JSON")
+
+    event_id = payload.get("event_id")
+    event_type = payload.get("event_type")
+    if not event_id or not event_type:
+        return {"status": "ignored", "reason": "no_event_id_or_type"}
+
+    occurred_at_str = payload.get("occurred_at") or ""
+    try:
+        event_dt = datetime.fromisoformat(occurred_at_str.replace("Z", "+00:00"))
+    except Exception:
+        event_dt = datetime.now(timezone.utc)
+
+    # Idempotency: a processed row for this event_id means a Paddle retry.
+    try:
+        dup_res = supabase.table("webhook_logs").select("status").eq("event_id", event_id).execute()
+        if dup_res.data and any(r.get("status") == "processed" for r in dup_res.data):
+            return {"status": "ok", "event_id": event_id, "duplicate": True}
+    except Exception as e:
+        logger.warning(f"[Paddle] Dedup lookup failed for {event_id}: {e}")
+
+    data = payload.get("data") or {}
+    custom_data = data.get("custom_data") or {}
+    user_id = custom_data.get("user_id") if isinstance(custom_data, dict) else None
+    sub_id, cust_id = _paddle_event_ids(event_type, data)
+    if not user_id:
+        user_id = _paddle_lookup_user_by_subscription(sub_id)
+    if not user_id:
+        logger.warning(f"[Paddle] No user resolvable for {event_type} {event_id}")
+        try:
+            supabase.table("webhook_logs").insert({
+                "event_id": event_id,
+                "event_name": event_type,
+                "user_id": None,
+                "event_updated_at": event_dt.isoformat(),
+                "status": "ignored_no_user"
+            }).execute()
+        except Exception as log_err:
+            logger.warning(f"[Paddle] Could not insert ignored webhook_log: {log_err}")
+        return {"status": "ignored", "reason": "no_user_id"}
+
+    try:
+        prof_res = supabase.table("user_profiles").select("*").eq("user_id", user_id).execute()
+        current_profile = prof_res.data[0] if prof_res.data else None
+    except Exception as e:
+        logger.error(f"[Paddle] Database read error for user {user_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Database read error")
+    if not current_profile:
+        logger.warning(f"[Paddle] User profile not found for user_id {user_id}")
+        return {"status": "ignored", "reason": "user_not_found"}
+
+    current_sub_updated_at_str = current_profile.get("subscription_updated_at")
+    current_dt = None
+    if current_sub_updated_at_str:
+        try:
+            current_dt = datetime.fromisoformat(current_sub_updated_at_str.replace("Z", "+00:00"))
+        except Exception:
+            current_dt = None
+    if current_dt is not None and event_dt < current_dt:
+        logger.info(f"[Paddle] Ignored stale event {event_type} for user {user_id}")
+        try:
+            supabase.table("webhook_logs").insert({
+                "event_id": event_id,
+                "event_name": event_type,
+                "user_id": user_id,
+                "event_updated_at": event_dt.isoformat(),
+                "status": "ignored_stale"
+            }).execute()
+        except Exception as log_err:
+            logger.warning(f"[Paddle] Could not insert stale webhook_log: {log_err}")
+        return {"status": "ignored", "reason": "stale_event"}
+
+    update_payload = {
+        "subscription_updated_at": event_dt.isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    if sub_id:
+        update_payload["subscription_id"] = sub_id
+    if cust_id:
+        update_payload["customer_id"] = cust_id
+    new_is_subscribed = resolve_paddle_subscription_status(event_type, data)
+    if new_is_subscribed is not None:
+        update_payload["is_subscribed"] = new_is_subscribed
+
+    # Refund path (adjustment events): record + cancel at period end, keep
+    # current-period access. Partial refunds and credits: record only.
+    is_full_approved_refund = (
+        event_type in ("adjustment.created", "adjustment.updated")
+        and data.get("action") in ("refund", "chargeback")
+        and data.get("status") == "approved"
+        and data.get("type") == "full"
+    )
+    if is_full_approved_refund:
+        logger.info(f"[Paddle] Full approved {data.get('action')} for user {user_id} "
+                    f"(txn {data.get('transaction_id')}); cancelling subscription at period end")
+
+    try:
+        supabase.table("user_profiles").update(update_payload).eq("user_id", user_id).execute()
+    except Exception as e:
+        logger.error(f"[Paddle] Database update error for user {user_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Database update error")
+
+    try:
+        supabase.table("webhook_logs").insert({
+            "event_id": event_id,
+            "event_name": event_type,
+            "user_id": user_id,
+            "event_updated_at": event_dt.isoformat(),
+            "status": "processed"
+        }).execute()
+    except Exception as log_err:
+        logger.warning(f"[Paddle] Could not insert webhook_log: {log_err}")
+
+    # Best-effort, AFTER the profile update + audit row: a slow/failed cancel
+    # must never turn this webhook into a Paddle retry (dedup makes retries
+    # safe, but the refund is already recorded either way).
+    if is_full_approved_refund and sub_id:
+        try:
+            paddle_api_request("POST", f"/subscriptions/{sub_id}/cancel",
+                               {"effective_from": "next_billing_period"})
+            logger.info(f"[Paddle] Subscription {sub_id} scheduled to cancel at period end")
+        except Exception as e:
+            logger.warning(f"[Paddle] Period-end cancel failed for {sub_id} "
+                           f"(refund recorded; cancel manually in dashboard): {e}")
+
+    return {"status": "ok", "event_id": event_id}
+
 

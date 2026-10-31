@@ -128,6 +128,10 @@ function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [usage, setUsage] = useState<{chars_used: number, chars_limit: number | string} | null>(null);
+  const [billingConfig, setBillingConfig] = useState<{environment: string, client_token: string | null, plans: {monthly: boolean, yearly: boolean}} | null>(null);
+  const [subscribeBusy, setSubscribeBusy] = useState<string | null>(null);
+  const [subscribeError, setSubscribeError] = useState<string | null>(null);
+  const [subscribeNotice, setSubscribeNotice] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -143,6 +147,66 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Paddle 订阅：登录后拉取可售方案；从 Paddle 结账返回时提示等待 webhook 确认。
+  // 权限只由服务端 webhook 授予，浏览器回到本站不代表已开通。
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') === 'success') {
+      setSubscribeNotice('付款完成！订阅状态将在 Paddle 确认后更新，通常几秒内生效，刷新后额度会变为订阅档。');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (!session?.access_token) {
+      setBillingConfig(null);
+      return;
+    }
+    fetch(`${API_URL}/billing/config`, {
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
+    }).then(r => r.ok ? r.json() : null).then(setBillingConfig).catch(() => setBillingConfig(null));
+  }, [session?.access_token]);
+
+  const loadPaddleJs = () => new Promise<any>((resolve, reject) => {
+    const w = window as any;
+    if (w.Paddle) return resolve(w.Paddle);
+    const s = document.createElement('script');
+    s.src = 'https://cdn.paddle.com/v2/paddle.js';
+    s.onload = () => resolve((window as any).Paddle);
+    s.onerror = () => reject(new Error('Paddle.js 加载失败'));
+    document.head.appendChild(s);
+  });
+
+  const handleSubscribe = async (plan: 'monthly' | 'yearly') => {
+    if (!session?.access_token) return;
+    setSubscribeBusy(plan);
+    setSubscribeError(null);
+    try {
+      const res = await fetch(`${API_URL}/billing/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ plan }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || `结账创建失败（${res.status}）`);
+      }
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+        return;
+      }
+      // 托管结账链接为空时退回 Paddle.js 悬浮结账（需 client_token）。
+      if (data.transaction_id && billingConfig?.client_token) {
+        const Paddle = await loadPaddleJs();
+        Paddle.Initialize({ token: billingConfig.client_token, environment: billingConfig.environment === 'live' ? 'production' : 'sandbox' });
+        Paddle.Checkout.open({ transactionId: data.transaction_id, settings: { successUrl: `${window.location.origin}/?checkout=success` } });
+        return;
+      }
+      throw new Error('结账链接不可用，请稍后再试');
+    } catch (err: any) {
+      setSubscribeError(err.message || '订阅失败，请稍后再试');
+    } finally {
+      setSubscribeBusy(null);
+    }
+  };
 
 
   const pages = useMemo(() => paginateText(text), [text]);
@@ -439,6 +503,24 @@ function App() {
               AI 正在解析...
             </div>
           )}
+          {session && billingConfig && billingConfig.plans.monthly && (
+            <button
+              onClick={() => handleSubscribe('monthly')}
+              disabled={subscribeBusy !== null}
+              style={{padding: '6px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 600}}
+            >
+              {subscribeBusy === 'monthly' ? '跳转中...' : '月付订阅'}
+            </button>
+          )}
+          {session && billingConfig && billingConfig.plans.yearly && (
+            <button
+              onClick={() => handleSubscribe('yearly')}
+              disabled={subscribeBusy !== null}
+              style={{padding: '6px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 600}}
+            >
+              {subscribeBusy === 'yearly' ? '跳转中...' : '年付订阅'}
+            </button>
+          )}
           <button 
             onClick={() => supabase.auth.signOut()}
             style={{padding: '6px 12px', background: '#27272a', color: '#a1a1aa', border: '1px solid #3f3f46', borderRadius: '6px', cursor: 'pointer', fontSize: '13px'}}
@@ -447,6 +529,17 @@ function App() {
           </button>
         </div>
       </header>
+
+      {subscribeNotice && (
+        <div style={{ padding: '12px 20px', backgroundColor: '#f0fdf4', color: '#166534', borderBottom: '1px solid #bbf7d0', fontSize: '14px' }}>
+          ✅ {subscribeNotice}
+        </div>
+      )}
+      {subscribeError && (
+        <div style={{ padding: '12px 20px', backgroundColor: '#fef2f2', color: '#991b1b', borderBottom: '1px solid #fecaca', fontSize: '14px' }}>
+          ⚠️ {subscribeError}
+        </div>
+      )}
 
       <section className="main-layout">
 
